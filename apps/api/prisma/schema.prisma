@@ -1,0 +1,432 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  VIEWER
+}
+
+enum ContentType {
+  FILM
+  SERIES
+  EPISODE
+  TRAILER
+  BONUS
+}
+
+enum PublishStatus {
+  DRAFT
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SubscriptionStatus {
+  INACTIVE
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+}
+
+enum DeviceLoginStatus {
+  PENDING
+  APPROVED
+  CONSUMED
+  EXPIRED
+  DENIED
+}
+
+enum CouponKind {
+  PERCENT_OFF
+  AMOUNT_OFF
+  FREE_TRIAL
+}
+
+enum CouponDuration {
+  ONCE
+  REPEATING
+  FOREVER
+}
+
+enum PushPlatform {
+  WEB
+  ROKU
+  FIRE_TV
+  IOS
+  ANDROID
+  OTHER
+}
+
+enum PushProvider {
+  ONESIGNAL
+}
+
+enum PushCampaignStatus {
+  SENT
+  FAILED
+  QUEUED
+}
+
+enum GiftCardPurchaseStatus {
+  PENDING
+  COMPLETED
+  CANCELED
+}
+
+enum GiftCardStatus {
+  AVAILABLE
+  REDEEMED
+  EXPIRED
+  VOID
+}
+
+enum WebhookProvider {
+  STRIPE
+  MUX
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSED
+  FAILED
+}
+
+enum HeroEventType {
+  IMPRESSION
+  CLICK
+}
+
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  passwordHash String
+  displayName  String
+  role         Role           @default(VIEWER)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  subscriptions Subscription[]
+  deviceLogins  DeviceLoginSession[]
+  watchProgress WatchProgress[]
+  myListItems   MyListItem[]
+  couponRedemptions CouponRedemption[]
+  pushDevices   PushDevice[]
+  pushCampaignsRequested PushCampaign[]
+  redeemedGiftCards GiftCard[]
+}
+
+model Plan {
+  id            String         @id @default(cuid())
+  code          String         @unique
+  name          String
+  interval      String
+  priceCents    Int
+  currency      String         @default("USD")
+  provider      String         @default("stripe")
+  providerPriceId String?
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+  couponRedemptions CouponRedemption[]
+  giftCardProducts  GiftCardProduct[]
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  userId                 String
+  planId                 String
+  status                 SubscriptionStatus @default(INACTIVE)
+  provider               String             @default("stripe")
+  providerSubscriptionId String?
+  currentPeriodEnd       DateTime?
+  canceledAt             DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  user                   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                   Plan               @relation(fields: [planId], references: [id])
+
+  @@index([userId, status])
+}
+
+model ContentItem {
+  id              String          @id @default(cuid())
+  slug            String          @unique
+  title           String
+  author          String?
+  synopsis        String          @db.Text
+  type            ContentType
+  posterUrl       String
+  heroPreviewUrl  String?
+  playbackUrl     String?
+  videoProvider   String?
+  videoStatus     String          @default("none")
+  muxUploadId     String?         @unique
+  muxAssetId      String?         @unique
+  muxPlaybackId   String?         @unique
+  videoError      String?
+  durationSeconds Int             @default(0)
+  releaseYear     Int?
+  tags            String[]
+  isPremium       Boolean         @default(true)
+  publishStatus   PublishStatus   @default(DRAFT)
+  publishedAt     DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  collectionItems CollectionItem[]
+  watchProgress   WatchProgress[]
+  myListItems     MyListItem[]
+  heroEvents      HeroEvent[]
+
+  @@index([publishStatus, publishedAt])
+  @@index([author])
+}
+
+model HeroEvent {
+  id         String        @id @default(cuid())
+  eventType  HeroEventType
+  platform   String
+  path       String?
+  sessionId  String?
+  contentId  String?
+  createdAt  DateTime      @default(now())
+  content    ContentItem?  @relation(fields: [contentId], references: [id], onDelete: SetNull)
+
+  @@index([eventType, createdAt])
+  @@index([platform, createdAt])
+  @@index([contentId, createdAt])
+}
+
+model WatchProgress {
+  id              String      @id @default(cuid())
+  userId          String
+  contentId       String
+  positionSeconds Int         @default(0)
+  durationSeconds Int         @default(0)
+  progressPercent Float       @default(0)
+  completed       Boolean     @default(false)
+  lastPlayedAt    DateTime    @default(now())
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content         ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contentId])
+  @@index([userId, lastPlayedAt])
+}
+
+model MyListItem {
+  id        String    @id @default(cuid())
+  userId    String
+  contentId String
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contentId])
+  @@index([userId, createdAt])
+}
+
+model Collection {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  title       String
+  description String?
+  isActive    Boolean          @default(true)
+  isPublic    Boolean          @default(true)
+  sortOrder   Int              @default(0)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  items       CollectionItem[]
+
+  @@index([isActive, isPublic, sortOrder])
+}
+
+model CollectionItem {
+  id         String     @id @default(cuid())
+  collectionId String
+  contentId  String
+  sortOrder  Int        @default(0)
+  createdAt  DateTime   @default(now())
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  content    ContentItem @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([collectionId, contentId])
+  @@index([collectionId, sortOrder])
+}
+
+model DeviceLoginSession {
+  id            String            @id @default(cuid())
+  userCode      String            @unique
+  status        DeviceLoginStatus @default(PENDING)
+  userId        String?
+  userAgent     String?
+  clientName    String?
+  expiresAt     DateTime
+  approvedAt    DateTime?
+  consumedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, expiresAt])
+}
+
+model Coupon {
+  id                    String             @id @default(cuid())
+  code                  String             @unique
+  name                  String
+  kind                  CouponKind
+  duration              CouponDuration     @default(ONCE)
+  percentOff            Int?
+  amountOffCents        Int?
+  trialDays             Int?
+  durationInMonths      Int?
+  maxRedemptions        Int?
+  expiresAt             DateTime?
+  isActive              Boolean            @default(true)
+  stripeCouponId        String?            @unique
+  stripePromotionCodeId String?            @unique
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  redemptions           CouponRedemption[]
+
+  @@index([isActive, expiresAt])
+}
+
+model CouponRedemption {
+  id                      String   @id @default(cuid())
+  couponId                String
+  userId                  String
+  planId                  String?
+  stripeCheckoutSessionId String?  @unique
+  stripeSubscriptionId    String?
+  createdAt               DateTime @default(now())
+  coupon                  Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                    Plan?    @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@index([couponId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model PushDevice {
+  id          String       @id @default(cuid())
+  userId      String?
+  platform    PushPlatform
+  provider    PushProvider @default(ONESIGNAL)
+  token       String       @unique
+  deviceName  String?
+  isActive    Boolean      @default(true)
+  lastSeenAt  DateTime     @default(now())
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  user        User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([platform, isActive])
+  @@index([userId, isActive])
+}
+
+model PushCampaign {
+  id            String             @id @default(cuid())
+  title         String
+  message       String
+  target        String
+  deeplinkUrl   String?
+  status        PushCampaignStatus @default(QUEUED)
+  provider      PushProvider       @default(ONESIGNAL)
+  requestedById String?
+  sentCount     Int                @default(0)
+  failedCount   Int                @default(0)
+  metadataJson  String?
+  sentAt        DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  requestedBy   User?              @relation(fields: [requestedById], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+model GiftCardProduct {
+  id               String             @id @default(cuid())
+  code             String             @unique
+  name             String
+  description      String?
+  amountCents      Int
+  currency         String             @default("USD")
+  durationMonths   Int                @default(1)
+  stripePriceId    String?            @unique
+  planId           String
+  isActive         Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  plan             Plan               @relation(fields: [planId], references: [id])
+  purchases        GiftCardPurchase[]
+  giftCards        GiftCard[]
+
+  @@index([isActive, createdAt])
+}
+
+model GiftCardPurchase {
+  id                     String                 @id @default(cuid())
+  productId              String
+  purchaserName          String
+  purchaserEmail         String
+  recipientName          String?
+  recipientEmail         String
+  message                String?
+  status                 GiftCardPurchaseStatus @default(PENDING)
+  stripeCheckoutSessionId String?               @unique
+  giftCardId             String?                @unique
+  completedAt            DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  product                GiftCardProduct        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  giftCard               GiftCard?
+
+  @@index([status, createdAt])
+  @@index([productId, createdAt])
+}
+
+model GiftCard {
+  id              String         @id @default(cuid())
+  code            String         @unique
+  productId       String
+  purchaseId      String         @unique
+  status          GiftCardStatus @default(AVAILABLE)
+  redeemedByUserId String?
+  redeemedAt      DateTime?
+  expiresAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  product         GiftCardProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  purchase        GiftCardPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  redeemedByUser  User?          @relation(fields: [redeemedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([redeemedByUserId, redeemedAt])
+}
+
+model WebhookEventLog {
+  id            String             @id @default(cuid())
+  provider      WebhookProvider
+  eventType     String
+  externalId    String?
+  status        WebhookEventStatus @default(RECEIVED)
+  httpStatus    Int?
+  errorMessage  String?
+  payloadJson   String?
+  processedAt   DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([provider, createdAt])
+  @@index([status, createdAt])
+  @@index([externalId])
+}
