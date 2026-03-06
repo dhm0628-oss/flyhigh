@@ -22,6 +22,27 @@ import { contentTypeFromPosterExt, ensurePosterUploadsDir, getPosterUploadsDir, 
 
 const app = Fastify({ logger: true, bodyLimit: 12 * 1024 * 1024 });
 
+function getDatabaseTargetSummary(databaseUrl: string) {
+  try {
+    const parsed = new URL(databaseUrl);
+    return {
+      user: parsed.username || "<empty>",
+      host: parsed.hostname || "<empty>",
+      port: parsed.port || "<default>",
+      database: parsed.pathname?.replace(/^\//, "") || "<empty>",
+      hasPassword: Boolean(parsed.password)
+    };
+  } catch {
+    return {
+      user: "<invalid>",
+      host: "<invalid>",
+      port: "<invalid>",
+      database: "<invalid>",
+      hasPassword: false
+    };
+  }
+}
+
 const allowedOrigins = getAllowedCorsOrigins();
 
 await app.register(cors, {
@@ -188,6 +209,18 @@ await registerWebhookRoutes(app);
 
 const port = env.PORT;
 const readiness = getReadinessReport();
+const dbTarget = getDatabaseTargetSummary(env.DATABASE_URL);
+
+app.log.info(
+  {
+    dbUser: dbTarget.user,
+    dbHost: dbTarget.host,
+    dbPort: dbTarget.port,
+    dbName: dbTarget.database,
+    dbHasPassword: dbTarget.hasPassword
+  },
+  "database.target"
+);
 
 for (const check of readiness.checks) {
   if (check.status !== "pass") {
