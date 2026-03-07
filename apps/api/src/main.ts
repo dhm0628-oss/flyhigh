@@ -212,14 +212,7 @@ const readiness = getReadinessReport();
 const dbTarget = getDatabaseTargetSummary(env.DATABASE_URL);
 
 app.log.info(
-  {
-    dbUser: dbTarget.user,
-    dbHost: dbTarget.host,
-    dbPort: dbTarget.port,
-    dbName: dbTarget.database,
-    dbHasPassword: dbTarget.hasPassword
-  },
-  "database.target"
+  `database.target user=${dbTarget.user} host=${dbTarget.host} port=${dbTarget.port} db=${dbTarget.database} hasPassword=${dbTarget.hasPassword}`
 );
 
 for (const check of readiness.checks) {
