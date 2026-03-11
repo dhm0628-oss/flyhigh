@@ -1109,6 +1109,84 @@ a {
   font-weight: 700;
 }
 
+.page--account {
+  background: #0f1012;
+  color: #ececec;
+}
+
+.page--account .watch-hero {
+  background: radial-gradient(120% 120% at 20% 0%, #1c3040 0%, #111214 45%, #0f1012 100%);
+}
+
+.page--account .watch-back,
+.page--account .brand,
+.page--account h1,
+.page--account .watch-copy {
+  color: #f3f6f8;
+}
+
+.page--account .player-panel {
+  background: #15171a;
+  border-color: #2e3238;
+}
+
+.page--account .card__meta,
+.page--account .label {
+  color: #9ca3af;
+}
+
+.page--account .watch-facts span {
+  background: #111317;
+  border-color: #2e3238;
+  color: #d7dde2;
+}
+
+.page--account .btn--ghost {
+  border-color: #3b4149;
+  color: #e5e7eb;
+}
+
+.page--account .btn--secondary {
+  color: #e5e7eb;
+  border-color: #8a919c;
+}
+
+.page--account .table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.page--account .table th,
+.page--account .table td {
+  border-bottom: 1px solid #2e3238;
+  padding: 0.55rem 0.45rem;
+  text-align: left;
+  font-size: 0.92rem;
+}
+
+.page--account .table th {
+  color: #9ca3af;
+  font-weight: 600;
+}
+
+.account-shell {
+  gap: 1rem;
+}
+
+.account-panel h2,
+.account-panel h3 {
+  margin: 0;
+}
+
+.account-actions {
+  flex-wrap: wrap;
+}
+
+.page--account .account-history__item {
+  background: #111317;
+  border-color: #2e3238;
+}
+
 .code-input,
 .watch-login input,
 .browse-controls input,

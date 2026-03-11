@@ -74,6 +74,7 @@ type BillingResponse = {
 export function AccountClient() {
   const searchParams = useSearchParams();
   const [session, setSession] = useState<SessionResponse | null>(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
   const [history, setHistory] = useState<HistoryResponse | null>(null);
   const [billing, setBilling] = useState<BillingResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +110,8 @@ export function AccountClient() {
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load account");
+    } finally {
+      setSessionLoading(false);
     }
   }
 
@@ -274,7 +277,7 @@ export function AccountClient() {
   }
 
   return (
-    <main className="page">
+    <main className="page page--account">
       <section className="watch-hero">
         <div className="watch-hero__inner">
           <Link href="/" className="watch-back">Back to Flyhigh.tv</Link>
@@ -288,22 +291,26 @@ export function AccountClient() {
         {error ? <p className="web-status web-status--error">{error}</p> : null}
         {notice ? <p className="web-status web-status--ok">{notice}</p> : null}
 
-        {session?.authenticated ? (
-          <div className="stack">
-            <div className="player-panel">
+        {sessionLoading ? (
+          <div className="player-panel auth-panel">
+            <p className="card__meta">Loading account...</p>
+          </div>
+        ) : session?.authenticated ? (
+          <div className="stack account-shell">
+            <div className="player-panel account-panel account-panel--profile">
               <h2>{session.viewer?.displayName}</h2>
               <div className="account-grid">
                 <div><div className="label">Email</div><div>{session.viewer?.email}</div></div>
                 <div><div className="label">Subscription</div><div>{session.viewer?.subscriptionStatus}</div></div>
               </div>
-              <div className="hero__actions">
+              <div className="hero__actions account-actions">
                 <Link className="btn btn--primary" href="/subscribe">View Plans</Link>
                 <Link className="btn btn--ghost" href="/activate">Activate TV</Link>
                 <button className="btn btn--ghost" type="button" onClick={() => void onLogout()}>{busy === "logout" ? "Signing out..." : "Sign Out"}</button>
               </div>
             </div>
 
-            <div className="player-panel">
+            <div className="player-panel account-panel account-panel--billing">
               <div className="row__header"><h2>Billing</h2></div>
               {billing?.subscription ? (
                 <>
@@ -345,7 +352,7 @@ export function AccountClient() {
               ) : (
                 <p className="card__meta">No active billing record yet. Start from View Plans to subscribe.</p>
               )}
-              <div className="hero__actions" style={{ marginTop: "0.75rem" }}>
+              <div className="hero__actions account-actions" style={{ marginTop: "0.75rem" }}>
                 {billing?.subscription?.provider === "stripe" ? (
                   <button className="btn btn--ghost" type="button" onClick={() => void onManageBilling()}>
                     {busy === "billing-portal" ? "Opening Billing..." : "Open Billing Portal"}
@@ -370,7 +377,7 @@ export function AccountClient() {
               <div style={{ marginTop: "0.9rem" }}>
                 <div className="row__header"><h3>Billing History</h3></div>
                 {billing?.invoices?.length ? (
-                  <div className="table" style={{ marginTop: "0.5rem" }}>
+                  <div className="table account-table" style={{ marginTop: "0.5rem" }}>
                     <table>
                       <thead>
                         <tr>
@@ -409,7 +416,7 @@ export function AccountClient() {
               {billing?.giftCardEntitlements?.length ? (
                 <div style={{ marginTop: "0.9rem" }}>
                   <div className="row__header"><h3>Gift Card Access</h3></div>
-                  <div className="table" style={{ marginTop: "0.5rem" }}>
+                  <div className="table account-table" style={{ marginTop: "0.5rem" }}>
                     <table>
                       <thead>
                         <tr>
@@ -435,7 +442,7 @@ export function AccountClient() {
               ) : null}
             </div>
 
-            <div className="player-panel">
+            <div className="player-panel account-panel account-panel--history">
               <div className="row__header">
                 <h2>Watch History</h2>
                 {history?.items?.length ? (
