@@ -489,19 +489,38 @@ export function AccountClient() {
             </div>
           </div>
         ) : (
-          <div className="player-panel">
-            <div className="tab-row">
-              <button type="button" className={`tab-btn ${mode === "login" ? "is-active" : ""}`} onClick={() => setMode("login")}>Login</button>
-              <button type="button" className={`tab-btn ${mode === "register" ? "is-active" : ""}`} onClick={() => setMode("register")}>Register</button>
+          <div className="auth-shell">
+            <aside className="auth-brand-panel">
+              <span className="auth-brand-panel__eyebrow">FlyHigh TV</span>
+              <h2>Wakeboarding on Demand</h2>
+              <p>
+                Classic films, new releases, edits, and originals in one place.
+              </p>
+              <div className="watch-facts">
+                <span>Secure billing via Stripe</span>
+                <span>Cancel anytime</span>
+              </div>
+            </aside>
+            <div className="player-panel auth-panel">
+              <div className="tab-row auth-tabs">
+                <button type="button" className={`tab-btn ${mode === "login" ? "is-active" : ""}`} onClick={() => setMode("login")}>Sign In</button>
+                <button type="button" className={`tab-btn ${mode === "register" ? "is-active" : ""}`} onClick={() => setMode("register")}>Create Account</button>
+              </div>
+              <h3 className="auth-panel__title">{mode === "login" ? "Welcome back" : "Create your account"}</h3>
+              <p className="card__meta auth-panel__subtitle">
+                {mode === "login"
+                  ? "Sign in to manage billing and keep watching."
+                  : "Set up your FlyHigh account to start your trial and stream."}
+              </p>
+              <form className="watch-login auth-form" onSubmit={onSubmit}>
+                <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+                {mode === "register" ? <label>Full name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required /></label> : null}
+                <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+                {mode === "register" ? <p className="card__meta auth-password-note">Use at least 12 chars with uppercase, lowercase, number, and symbol.</p> : null}
+                <button className="btn btn--primary auth-submit" type="submit">{busy === mode ? (mode === "login" ? "Signing in..." : "Creating...") : (mode === "login" ? "Sign In" : "Create Account")}</button>
+              </form>
+              <p className="card__meta">Premium playback requires an active subscription.</p>
             </div>
-            <form className="watch-login" onSubmit={onSubmit}>
-              <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-              {mode === "register" ? <label>Full name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required /></label> : null}
-              <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
-              {mode === "register" ? <p className="card__meta">Use at least 12 chars with uppercase, lowercase, number, and symbol.</p> : null}
-              <button className="btn btn--primary" type="submit">{busy === mode ? (mode === "login" ? "Signing in..." : "Creating...") : (mode === "login" ? "Sign In" : "Create Account")}</button>
-            </form>
-            <p className="card__meta">Premium playback requires an active subscription.</p>
           </div>
         )}
       </section>
