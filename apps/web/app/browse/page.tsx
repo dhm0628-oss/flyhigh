@@ -2,6 +2,7 @@
 import type { ContentCard } from "@flyhigh/contracts";
 import { SiteFooter } from "../site-footer";
 import { SiteHeader } from "../site-header";
+import { BrowseSessionNote } from "./browse-session-note";
 
 type CatalogResponse = {
   total: number;
@@ -166,6 +167,7 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
             <div className="browse-hero__meta">
               <strong>{catalog.total}</strong>
               <span>Total titles</span>
+              <BrowseSessionNote />
             </div>
           </div>
           {bannerItem ? (

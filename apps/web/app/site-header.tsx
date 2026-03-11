@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { HeaderAuthCta } from "./header-auth-cta";
 
 type SiteHeaderProps = {
   compact?: boolean;
@@ -25,8 +26,7 @@ export function SiteHeader({ compact = false }: SiteHeaderProps) {
           <Link href="/team">Pro Team</Link>
         </nav>
         <div className="theme-header__cta">
-          <Link className="btn btn--secondary btn--sm" href="/account">Sign In</Link>
-          <Link className="btn btn--header-primary btn--sm" href="/account?mode=register&next=%2Fsubscribe">Join now</Link>
+          <HeaderAuthCta />
         </div>
       </div>
     </header>
