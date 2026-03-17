@@ -652,7 +652,8 @@ export function AdminConsole() {
     providerPriceId: string;
     isActive: boolean;
   }>>({});
-  const [collectionDrafts, setCollectionDrafts] = useState<Record<string, string>>({});
+  const [collectionDrafts, setCollectionDrafts] = useState<Record<string, string[]>>({});
+  const [collectionSlugInputDrafts, setCollectionSlugInputDrafts] = useState<Record<string, string>>({});
   const [collectionMetaDrafts, setCollectionMetaDrafts] = useState<
     Record<string, { title: string; description: string; sourceTag: string; sourceLimit: number; sortOrder: number; isPublic: boolean; isActive: boolean }>
   >({});
@@ -832,7 +833,8 @@ export function AdminConsole() {
     setPushDevices(pushDevicesRes.devices);
     setPushCampaigns(pushCampaignRes.campaigns);
     setWebhookLogs(webhookLogRes.logs);
-    setCollectionDrafts(Object.fromEntries(rows.collections.map((r) => [r.id, r.items.map((i) => i.slug).join(", ")])));
+    setCollectionDrafts(Object.fromEntries(rows.collections.map((r) => [r.id, r.items.map((i) => i.slug)])));
+    setCollectionSlugInputDrafts(Object.fromEntries(rows.collections.map((r) => [r.id, ""])));
     setCollectionMetaDrafts(
       Object.fromEntries(
         rows.collections.map((r) => [
@@ -1816,7 +1818,7 @@ export function AdminConsole() {
       isActive: row.isActive ?? true
     };
     const slugToId = new Map(content.map((c) => [c.slug, c.id]));
-    const slugs = (collectionDrafts[row.id] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    const slugs = (collectionDrafts[row.id] ?? []).map((s) => s.trim()).filter(Boolean);
     const missing = slugs.filter((s) => !slugToId.has(s));
     if (missing.length) {
       setError(`Unknown slugs: ${missing.join(", ")}`);
@@ -1946,6 +1948,45 @@ export function AdminConsole() {
         }
       };
     });
+  }
+
+  function addCollectionSlug(collectionId: string) {
+    const nextSlug = (collectionSlugInputDrafts[collectionId] ?? "").trim();
+    if (!nextSlug) return;
+
+    const exists = content.some((item) => item.slug === nextSlug);
+    if (!exists) {
+      setError(`Unknown slug: ${nextSlug}`);
+      return;
+    }
+
+    setCollectionDrafts((current) => {
+      const existing = current[collectionId] ?? [];
+      if (existing.includes(nextSlug)) return current;
+      return { ...current, [collectionId]: [...existing, nextSlug] };
+    });
+    setCollectionSlugInputDrafts((current) => ({ ...current, [collectionId]: "" }));
+    setError(null);
+  }
+
+  function moveCollectionSlug(collectionId: string, slug: string, direction: "up" | "down") {
+    setCollectionDrafts((current) => {
+      const existing = [...(current[collectionId] ?? [])];
+      const index = existing.indexOf(slug);
+      if (index < 0) return current;
+      const nextIndex = direction === "up" ? index - 1 : index + 1;
+      if (nextIndex < 0 || nextIndex >= existing.length) return current;
+      const [moved] = existing.splice(index, 1);
+      existing.splice(nextIndex, 0, moved);
+      return { ...current, [collectionId]: existing };
+    });
+  }
+
+  function removeCollectionSlug(collectionId: string, slug: string) {
+    setCollectionDrafts((current) => ({
+      ...current,
+      [collectionId]: (current[collectionId] ?? []).filter((entry) => entry !== slug)
+    }));
   }
 
   if (loading) return <main className="admin-shell"><div className="panel"><strong>Loading admin...</strong></div></main>;
@@ -2747,9 +2788,44 @@ export function AdminConsole() {
                       ? `Auto-populates from tag "${row.sourceTag}"${row.sourceLimit ? ` (up to ${row.sourceLimit})` : ""}. Manual slugs below are kept as fallback only.`
                       : `Current videos: ${row.items.map((i) => i.slug).join(", ") || "none"}`}
                   </p>
-                  <label>Video slugs (CSV)
-                    <input value={collectionDrafts[row.id] ?? ""} onChange={(e) => setCollectionDrafts({ ...collectionDrafts, [row.id]: e.target.value })} placeholder="double-up-sessions, park-lines" />
-                  </label>
+                  <div className="collection-videos">
+                    <div className="label">Ordered videos in this row</div>
+                    {(collectionDrafts[row.id] ?? []).length ? (
+                      <div className="collection-video-list">
+                        {(collectionDrafts[row.id] ?? []).map((slug, index, list) => (
+                          <div className="collection-video-item" key={`${row.id}-${slug}`}>
+                            <div>
+                              <strong>{index + 1}. {slug}</strong>
+                            </div>
+                            <div className="row-actions">
+                              <button type="button" className="btn-inline" onClick={() => moveCollectionSlug(row.id, slug, "up")} disabled={index === 0}>Up</button>
+                              <button type="button" className="btn-inline" onClick={() => moveCollectionSlug(row.id, slug, "down")} disabled={index === list.length - 1}>Down</button>
+                              <button type="button" className="btn-inline danger" onClick={() => removeCollectionSlug(row.id, slug)}>Remove</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="label">No manual videos assigned yet.</p>
+                    )}
+
+                    <div className="collection-video-add">
+                      <label>Add video by slug
+                        <input
+                          list={`collection-slugs-${row.id}`}
+                          value={collectionSlugInputDrafts[row.id] ?? ""}
+                          onChange={(e) => setCollectionSlugInputDrafts({ ...collectionSlugInputDrafts, [row.id]: e.target.value })}
+                          placeholder="start typing a slug..."
+                        />
+                        <datalist id={`collection-slugs-${row.id}`}>
+                          {content.map((item) => (
+                            <option key={item.id} value={item.slug}>{item.title}</option>
+                          ))}
+                        </datalist>
+                      </label>
+                      <button type="button" className="btn-inline" onClick={() => addCollectionSlug(row.id)}>Add</button>
+                    </div>
+                  </div>
                   <div className="row-actions"><button className="btn btn-secondary" onClick={() => void saveCollectionItems(row)} disabled={busy === `row-${row.id}`}>{busy === `row-${row.id}` ? "Saving..." : "Save Category Settings"}</button></div>
                 </div>
               ))}
