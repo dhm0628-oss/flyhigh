@@ -138,24 +138,37 @@ export async function registerContentRoutes(app: FastifyInstance) {
       }
     });
 
-    const heroCollection = collections.find((collection) => collection.key.toLowerCase() === "hero");
-    const featuredItemsFromHero =
-      heroCollection?.items
+    const resolveCollectionItems = async (collection: (typeof collections)[number]) => {
+      if (collection.sourceTag?.trim()) {
+        const taggedItems = await prisma.contentItem.findMany({
+          where: {
+            publishStatus: PublishStatus.PUBLISHED,
+            tags: { has: collection.sourceTag.trim() }
+          },
+          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+          take: Math.max(1, Math.min(collection.sourceLimit || 24, 48))
+        });
+        return taggedItems.map(mapContentCard);
+      }
+
+      return collection.items
         .map((item) => item.content)
         .filter((content) => content.publishStatus === PublishStatus.PUBLISHED)
-        .map(mapContentCard) ?? [];
+        .map(mapContentCard);
+    };
 
-    const rows = collections
-      .filter((collection) => collection.id !== heroCollection?.id)
-      .map((collection) => ({
+    const heroCollection = collections.find((collection) => collection.key.toLowerCase() === "hero");
+    const featuredItemsFromHero = heroCollection ? await resolveCollectionItems(heroCollection) : [];
+
+    const rowCollections = collections.filter((collection) => collection.id !== heroCollection?.id);
+    const rowItems = await Promise.all(
+      rowCollections.map(async (collection) => ({
         id: collection.id,
         title: collection.title,
-        items: collection.items
-          .map((item) => item.content)
-          .filter((content) => content.publishStatus === PublishStatus.PUBLISHED)
-          .map(mapContentCard)
+        items: await resolveCollectionItems(collection)
       }))
-      .filter((row) => row.items.length > 0);
+    );
+    const rows = rowItems.filter((row) => row.items.length > 0);
 
     const fallbackFeaturedItems = rows
       .flatMap((row) => row.items)
@@ -1264,6 +1277,8 @@ export async function registerContentRoutes(app: FastifyInstance) {
         key: collection.key,
         title: collection.title,
         description: collection.description,
+        sourceTag: collection.sourceTag,
+        sourceLimit: collection.sourceLimit,
         isActive: collection.isActive,
         isPublic: collection.isPublic,
         sortOrder: collection.sortOrder,
@@ -1287,6 +1302,8 @@ export async function registerContentRoutes(app: FastifyInstance) {
       key?: string;
       title?: string;
       description?: string;
+      sourceTag?: string | null;
+      sourceLimit?: number;
       sortOrder?: number;
       isActive?: boolean;
       isPublic?: boolean;
@@ -1301,6 +1318,9 @@ export async function registerContentRoutes(app: FastifyInstance) {
         key: body.key.trim(),
         title: body.title.trim(),
         description: body.description?.trim(),
+        sourceTag: typeof body.sourceTag === "string" ? body.sourceTag.trim() || null : null,
+        sourceLimit:
+          typeof body.sourceLimit === "number" ? Math.max(1, Math.min(48, Math.round(body.sourceLimit))) : 24,
         sortOrder: Math.max(0, Math.round(body.sortOrder ?? 0)),
         isActive: body.isActive ?? true,
         isPublic: body.isPublic ?? true
@@ -1323,6 +1343,8 @@ export async function registerContentRoutes(app: FastifyInstance) {
     const body = (request.body ?? {}) as {
       title?: string;
       description?: string | null;
+      sourceTag?: string | null;
+      sourceLimit?: number;
       sortOrder?: number;
       isActive?: boolean;
       isPublic?: boolean;
@@ -1345,6 +1367,16 @@ export async function registerContentRoutes(app: FastifyInstance) {
               : typeof body.description === "string"
                 ? body.description.trim()
                 : undefined,
+          sourceTag:
+            body.sourceTag === null
+              ? null
+              : typeof body.sourceTag === "string"
+                ? body.sourceTag.trim() || null
+                : undefined,
+          sourceLimit:
+            typeof body.sourceLimit === "number"
+              ? Math.max(1, Math.min(48, Math.round(body.sourceLimit)))
+              : undefined,
           sortOrder:
             typeof body.sortOrder === "number" ? Math.max(0, Math.round(body.sortOrder)) : undefined,
           isActive: typeof body.isActive === "boolean" ? body.isActive : undefined,

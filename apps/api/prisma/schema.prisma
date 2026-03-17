@@ -238,6 +238,8 @@ model Collection {
   key         String           @unique
   title       String
   description String?
+  sourceTag   String?
+  sourceLimit Int              @default(24)
   isActive    Boolean          @default(true)
   isPublic    Boolean          @default(true)
   sortOrder   Int              @default(0)

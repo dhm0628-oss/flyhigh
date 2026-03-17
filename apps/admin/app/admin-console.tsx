@@ -28,6 +28,8 @@ type Collection = {
   key: string;
   title: string;
   description?: string | null;
+  sourceTag?: string | null;
+  sourceLimit?: number;
   sortOrder: number;
   isPublic: boolean;
   isActive?: boolean;
@@ -652,7 +654,7 @@ export function AdminConsole() {
   }>>({});
   const [collectionDrafts, setCollectionDrafts] = useState<Record<string, string>>({});
   const [collectionMetaDrafts, setCollectionMetaDrafts] = useState<
-    Record<string, { title: string; description: string; sortOrder: number; isPublic: boolean; isActive: boolean }>
+    Record<string, { title: string; description: string; sourceTag: string; sourceLimit: number; sortOrder: number; isPublic: boolean; isActive: boolean }>
   >({});
 
   const [loginEmail, setLoginEmail] = useState("");
@@ -674,7 +676,7 @@ export function AdminConsole() {
     isPremium: true
   });
 
-  const [newCollection, setNewCollection] = useState({ key: "", title: "", sortOrder: 0, isPublic: true });
+  const [newCollection, setNewCollection] = useState({ key: "", title: "", sourceTag: "", sourceLimit: 24, sortOrder: 0, isPublic: true });
   const [uploadContentId, setUploadContentId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [importSourceUrl, setImportSourceUrl] = useState("");
@@ -838,6 +840,8 @@ export function AdminConsole() {
           {
             title: r.title ?? "",
             description: r.description ?? "",
+            sourceTag: r.sourceTag ?? "",
+            sourceLimit: r.sourceLimit ?? 24,
             sortOrder: r.sortOrder ?? 0,
             isPublic: r.isPublic ?? true,
             isActive: r.isActive ?? true
@@ -1518,7 +1522,7 @@ export function AdminConsole() {
     setError(null);
     try {
       await api("/v1/admin/collections", { method: "POST", body: JSON.stringify(newCollection) });
-      setNewCollection({ key: "", title: "", sortOrder: 0, isPublic: true });
+      setNewCollection({ key: "", title: "", sourceTag: "", sourceLimit: 24, sortOrder: 0, isPublic: true });
       await loadAdminData();
       setNotice("Collection created");
     } catch (err) {
@@ -1805,6 +1809,8 @@ export function AdminConsole() {
     const meta = collectionMetaDrafts[row.id] ?? {
       title: row.title,
       description: row.description ?? "",
+      sourceTag: row.sourceTag ?? "",
+      sourceLimit: row.sourceLimit ?? 24,
       sortOrder: row.sortOrder,
       isPublic: row.isPublic,
       isActive: row.isActive ?? true
@@ -1824,6 +1830,8 @@ export function AdminConsole() {
         body: JSON.stringify({
           title: meta.title,
           description: meta.description || null,
+          sourceTag: meta.sourceTag || null,
+          sourceLimit: meta.sourceLimit,
           sortOrder: meta.sortOrder,
           isPublic: meta.isPublic,
           isActive: meta.isActive,
@@ -1918,12 +1926,14 @@ export function AdminConsole() {
 
   function updateCollectionMetaDraft(
     collectionId: string,
-    patch: Partial<{ title: string; description: string; sortOrder: number; isPublic: boolean; isActive: boolean }>
+    patch: Partial<{ title: string; description: string; sourceTag: string; sourceLimit: number; sortOrder: number; isPublic: boolean; isActive: boolean }>
   ) {
     setCollectionMetaDrafts((current) => {
       const existing = current[collectionId] ?? {
         title: "",
         description: "",
+        sourceTag: "",
+        sourceLimit: 24,
         sortOrder: 0,
         isPublic: true,
         isActive: true
@@ -2655,6 +2665,8 @@ export function AdminConsole() {
               <form className="form-grid two-col" onSubmit={onCreateCollection}>
                 <label>Key<input value={newCollection.key} onChange={(e) => setNewCollection({ ...newCollection, key: e.target.value })} placeholder="new-releases" /></label>
                 <label>Title<input value={newCollection.title} onChange={(e) => setNewCollection({ ...newCollection, title: e.target.value })} /></label>
+                <label>Source Tag<input value={newCollection.sourceTag} onChange={(e) => setNewCollection({ ...newCollection, sourceTag: e.target.value })} placeholder="space-mob" /></label>
+                <label>Auto Row Limit<input type="number" min={1} max={48} value={newCollection.sourceLimit} onChange={(e) => setNewCollection({ ...newCollection, sourceLimit: Number(e.target.value) })} /></label>
                 <label>Sort Order<input type="number" value={newCollection.sortOrder} onChange={(e) => setNewCollection({ ...newCollection, sortOrder: Number(e.target.value) })} /></label>
                 <label className="checkbox"><input type="checkbox" checked={newCollection.isPublic} onChange={(e) => setNewCollection({ ...newCollection, isPublic: e.target.checked })} />Public category</label>
                 <div className="span-2"><button className="btn btn-primary" disabled={busy === "create-collection"}>{busy === "create-collection" ? "Creating..." : "Create Category"}</button></div>
@@ -2694,6 +2706,8 @@ export function AdminConsole() {
                     const meta = collectionMetaDrafts[row.id] ?? {
                       title: row.title,
                       description: row.description ?? "",
+                      sourceTag: row.sourceTag ?? "",
+                      sourceLimit: row.sourceLimit ?? 24,
                       sortOrder: row.sortOrder,
                       isPublic: row.isPublic,
                       isActive: row.isActive ?? true
@@ -2710,6 +2724,12 @@ export function AdminConsole() {
                           <label>Row Title
                             <input value={meta.title} onChange={(e) => updateCollectionMetaDraft(row.id, { title: e.target.value })} />
                           </label>
+                          <label>Source Tag
+                            <input value={meta.sourceTag} onChange={(e) => updateCollectionMetaDraft(row.id, { sourceTag: e.target.value })} placeholder="space-mob" />
+                          </label>
+                          <label>Auto Row Limit
+                            <input type="number" min={1} max={48} value={meta.sourceLimit} onChange={(e) => updateCollectionMetaDraft(row.id, { sourceLimit: Number(e.target.value) })} />
+                          </label>
                           <label>Sort Order
                             <input type="number" value={meta.sortOrder} onChange={(e) => updateCollectionMetaDraft(row.id, { sortOrder: Number(e.target.value) })} />
                           </label>
@@ -2722,11 +2742,15 @@ export function AdminConsole() {
                       </>
                     );
                   })()}
-                  <p className="label">Current videos: {row.items.map((i) => i.slug).join(", ") || "none"}</p>
+                  <p className="label">
+                    {row.sourceTag?.trim()
+                      ? `Auto-populates from tag "${row.sourceTag}"${row.sourceLimit ? ` (up to ${row.sourceLimit})` : ""}. Manual slugs below are kept as fallback only.`
+                      : `Current videos: ${row.items.map((i) => i.slug).join(", ") || "none"}`}
+                  </p>
                   <label>Video slugs (CSV)
                     <input value={collectionDrafts[row.id] ?? ""} onChange={(e) => setCollectionDrafts({ ...collectionDrafts, [row.id]: e.target.value })} placeholder="double-up-sessions, park-lines" />
                   </label>
-                  <div className="row-actions"><button className="btn btn-secondary" onClick={() => void saveCollectionItems(row)} disabled={busy === `row-${row.id}`}>{busy === `row-${row.id}` ? "Saving..." : "Save Category Videos"}</button></div>
+                  <div className="row-actions"><button className="btn btn-secondary" onClick={() => void saveCollectionItems(row)} disabled={busy === `row-${row.id}`}>{busy === `row-${row.id}` ? "Saving..." : "Save Category Settings"}</button></div>
                 </div>
               ))}
             </div>
