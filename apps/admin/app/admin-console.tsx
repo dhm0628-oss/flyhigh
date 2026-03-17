@@ -285,6 +285,16 @@ type BulkImportRowPayload = {
   releaseYear?: number;
   durationSeconds?: number;
 };
+type BatchLocalUploadRow = {
+  key: string;
+  file: File;
+  fileName: string;
+  guessedSlug: string;
+  contentId: string;
+  status: "matched" | "unmatched" | "uploading" | "processing" | "failed";
+  progress: number;
+  error?: string;
+};
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
@@ -297,6 +307,10 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+function fileNameToSlug(fileName: string): string {
+  return slugify(fileName.replace(/\.[^.]+$/, ""));
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API}${path}`, {
     ...init,
@@ -307,6 +321,34 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
   return data as T;
+}
+
+async function uploadFileToMux(
+  uploadUrl: string,
+  file: File,
+  onProgress: (progress: number) => void
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl);
+    if (file.type) {
+      xhr.setRequestHeader("Content-Type", file.type);
+    }
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      onProgress(Math.max(0, Math.min(100, Math.round((event.loaded / event.total) * 100))));
+    };
+    xhr.onerror = () => reject(new Error("Mux upload failed"));
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress(100);
+        resolve();
+        return;
+      }
+      reject(new Error(`Mux upload failed (${xhr.status})`));
+    };
+    xhr.send(file);
+  });
 }
 
 async function fileToBase64(file: File): Promise<string> {
@@ -681,6 +723,8 @@ export function AdminConsole() {
   const [uploadContentId, setUploadContentId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [importSourceUrl, setImportSourceUrl] = useState("");
+  const [batchUploadRows, setBatchUploadRows] = useState<BatchLocalUploadRow[]>([]);
+  const [batchUploadConcurrency, setBatchUploadConcurrency] = useState(2);
   const [bulkCsvText, setBulkCsvText] = useState("");
   const [bulkCsvFileName, setBulkCsvFileName] = useState("");
   const [bulkPreviewRows, setBulkPreviewRows] = useState<Array<{ row: number; title: string; slug: string; sourceUrl: string; publishStatus: string; type: string }>>([]);
@@ -739,6 +783,10 @@ export function AdminConsole() {
       return hayWithAuthor.includes(q);
     });
   }, [content, contentQuery, contentStatusFilter]);
+  const contentBySlug = useMemo(
+    () => new Map(content.map((item) => [item.slug, item])),
+    [content]
+  );
   const authorOptions = useMemo(() => {
     const set = new Set<string>();
     for (const item of content) {
@@ -1591,6 +1639,114 @@ export function AdminConsole() {
       await loadAdminData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Video import failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onBatchFilesSelected(fileList: FileList | null) {
+    if (!fileList?.length) return;
+
+    const nextRows = Array.from(fileList).map((file, index) => {
+      const guessedSlug = fileNameToSlug(file.name);
+      const match = contentBySlug.get(guessedSlug);
+      return {
+        key: `${file.name}-${file.size}-${index}`,
+        file,
+        fileName: file.name,
+        guessedSlug,
+        contentId: match?.id ?? "",
+        status: match ? "matched" : "unmatched",
+        progress: 0
+      } satisfies BatchLocalUploadRow;
+    });
+
+    setBatchUploadRows(nextRows);
+    setError(null);
+    setNotice(`Loaded ${nextRows.length} local files for batch upload`);
+  }
+
+  function updateBatchUploadRow(key: string, patch: Partial<BatchLocalUploadRow>) {
+    setBatchUploadRows((current) =>
+      current.map((row) => (row.key === key ? { ...row, ...patch } : row))
+    );
+  }
+
+  function setBatchUploadContent(key: string, contentId: string) {
+    setBatchUploadRows((current) =>
+      current.map((row) =>
+        row.key === key
+          ? {
+              ...row,
+              contentId,
+              status: contentId ? "matched" : "unmatched",
+              error: undefined
+            }
+          : row
+      )
+    );
+  }
+
+  async function onStartBatchLocalUpload() {
+    const queuedRows = batchUploadRows.filter((row) => row.contentId);
+    if (!queuedRows.length) {
+      setError("Load local files and match them to content items first");
+      return;
+    }
+
+    setBusy("mux-batch-upload");
+    setError(null);
+    setNotice(null);
+
+    let completed = 0;
+    let failed = 0;
+    let cursor = 0;
+    const workerCount = Math.max(1, Math.min(4, Number(batchUploadConcurrency) || 1));
+
+    const runNext = async () => {
+      while (cursor < queuedRows.length) {
+        const row = queuedRows[cursor];
+        cursor += 1;
+
+        try {
+          updateBatchUploadRow(row.key, {
+            status: "uploading",
+            progress: 0,
+            error: undefined
+          });
+
+          const upload = await api<{ uploadUrl: string; uploadId: string; provider: string }>(
+            `/v1/admin/content/${row.contentId}/video-upload`,
+            { method: "POST", body: JSON.stringify({}) }
+          );
+
+          await uploadFileToMux(upload.uploadUrl, row.file, (progress) => {
+            updateBatchUploadRow(row.key, { progress });
+          });
+
+          updateBatchUploadRow(row.key, {
+            status: "processing",
+            progress: 100
+          });
+          completed += 1;
+        } catch (err) {
+          failed += 1;
+          updateBatchUploadRow(row.key, {
+            status: "failed",
+            error: err instanceof Error ? err.message : "Upload failed"
+          });
+        }
+      }
+    };
+
+    try {
+      await Promise.all(Array.from({ length: workerCount }, () => runNext()));
+      await loadAdminData();
+      setNotice(
+        `Batch upload finished. ${completed} sent to Mux for processing${failed ? `, ${failed} failed` : ""}.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Batch upload failed");
     } finally {
       setBusy(null);
     }
@@ -2493,6 +2649,100 @@ export function AdminConsole() {
                   </button>
                 </div>
               </form>
+            </div>
+
+            <div className="card">
+              <div className="row__header">
+                <h2 className="section-title">Batch Upload Local Files To Mux</h2>
+                <div className="row-actions">
+                  <label>
+                    Concurrency
+                    <select
+                      value={batchUploadConcurrency}
+                      onChange={(e) => setBatchUploadConcurrency(Number(e.target.value))}
+                      style={{ marginLeft: "0.5rem" }}
+                    >
+                      <option value={1}>1</option>
+                      <option value={2}>2</option>
+                      <option value={3}>3</option>
+                      <option value={4}>4</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div className="label" style={{ marginTop: "0.5rem" }}>
+                Files are matched by slugified filename first. You can override the match before starting the queue.
+              </div>
+              <div className="form-grid two-col" style={{ marginTop: "0.75rem" }}>
+                <label className="span-2">
+                  Local video files
+                  <input
+                    type="file"
+                    accept="video/*"
+                    multiple
+                    onChange={(e) => void onBatchFilesSelected(e.target.files)}
+                  />
+                </label>
+                <div className="span-2 row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busy === "mux-batch-upload" || !batchUploadRows.some((row) => row.contentId)}
+                    onClick={() => void onStartBatchLocalUpload()}
+                  >
+                    {busy === "mux-batch-upload" ? "Uploading..." : "Start Batch Upload"}
+                  </button>
+                </div>
+              </div>
+              {batchUploadRows.length ? (
+                <div className="table" style={{ marginTop: "0.75rem" }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>File</th>
+                        <th>Guessed Slug</th>
+                        <th>Content Match</th>
+                        <th>Status</th>
+                        <th>Progress</th>
+                        <th>Error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {batchUploadRows.map((row) => {
+                        const matchedItem = content.find((item) => item.id === row.contentId);
+                        return (
+                          <tr key={row.key}>
+                            <td>{row.fileName}</td>
+                            <td>{row.guessedSlug || "-"}</td>
+                            <td>
+                              <select
+                                value={row.contentId}
+                                onChange={(e) => setBatchUploadContent(row.key, e.target.value)}
+                                disabled={busy === "mux-batch-upload"}
+                              >
+                                <option value="">No match</option>
+                                {content.map((item) => (
+                                  <option key={item.id} value={item.id}>
+                                    {item.title} ({item.slug})
+                                  </option>
+                                ))}
+                              </select>
+                              {matchedItem ? (
+                                <div className="label" style={{ marginTop: "0.25rem" }}>
+                                  {matchedItem.slug}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td><span className="badge">{row.status}</span></td>
+                            <td>{row.progress}%</td>
+                            <td>{row.error ?? "-"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
             </div>
 
             <div className="card">
