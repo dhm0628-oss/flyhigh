@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import type Stripe from "stripe";
 import { SubscriptionStatus, WebhookEventStatus, WebhookProvider } from "@prisma/client";
@@ -80,6 +81,62 @@ async function updateByMuxAssetId(assetId: string, data: Record<string, unknown>
   return true;
 }
 
+function parseMuxSignatureHeader(signatureHeader: string) {
+  const parts = signatureHeader.split(",").map((part) => part.trim());
+  const timestamp = parts.find((part) => part.startsWith("t="))?.slice(2) ?? "";
+  const signatures = parts
+    .filter((part) => part.startsWith("v1="))
+    .map((part) => part.slice(3))
+    .filter(Boolean);
+
+  return { timestamp, signatures };
+}
+
+function verifyMuxWebhookSignature(params: {
+  rawBody: string;
+  signatureHeader: string;
+  secret: string;
+  toleranceSeconds?: number;
+}) {
+  const { timestamp, signatures } = parseMuxSignatureHeader(params.signatureHeader);
+  if (!timestamp || !signatures.length) {
+    throw new Error("Invalid mux-signature header");
+  }
+
+  const timestampNumber = Number(timestamp);
+  if (!Number.isFinite(timestampNumber)) {
+    throw new Error("Invalid mux-signature timestamp");
+  }
+
+  const ageSeconds = Math.abs(Math.floor(Date.now() / 1000) - timestampNumber);
+  const toleranceSeconds = params.toleranceSeconds ?? 300;
+  if (ageSeconds > toleranceSeconds) {
+    throw new Error("Mux webhook signature timestamp outside tolerance");
+  }
+
+  const signedPayload = `${timestamp}.${params.rawBody}`;
+  const expectedSignature = createHmac("sha256", params.secret)
+    .update(signedPayload, "utf8")
+    .digest("hex");
+
+  const expectedBuffer = Buffer.from(expectedSignature, "hex");
+  const matched = signatures.some((signature) => {
+    try {
+      const receivedBuffer = Buffer.from(signature, "hex");
+      return (
+        receivedBuffer.length === expectedBuffer.length &&
+        timingSafeEqual(receivedBuffer, expectedBuffer)
+      );
+    } catch {
+      return false;
+    }
+  });
+
+  if (!matched) {
+    throw new Error("Invalid Mux webhook signature");
+  }
+}
+
 export async function registerWebhookRoutes(app: FastifyInstance) {
   const db = prisma as any;
   app.get("/v1/admin/webhooks", async (request, reply) => {
@@ -129,8 +186,9 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post("/v1/webhooks/mux", async (request, reply) => {
+  app.post("/v1/webhooks/mux", { config: { rawBody: true } }, async (request, reply) => {
     const signature = request.headers["mux-signature"];
+    const rawBody = (request as unknown as { rawBody?: string }).rawBody;
     const body = (request.body ?? {}) as MuxWebhookEvent;
     const log = await createWebhookLog({
       provider: WebhookProvider.MUX,
@@ -139,17 +197,40 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
       payload: body
     });
 
-    if (
-      env.MUX_WEBHOOK_SECRET &&
-      !env.MUX_WEBHOOK_SECRET.startsWith("replace-") &&
-      !signature
-    ) {
-      await updateWebhookLog(log.id, {
-        status: WebhookEventStatus.FAILED,
-        httpStatus: 401,
-        errorMessage: "Missing mux-signature header"
-      });
-      return reply.status(401).send({ error: "Missing mux-signature header" });
+    if (env.MUX_WEBHOOK_SECRET && !env.MUX_WEBHOOK_SECRET.startsWith("replace-")) {
+      if (!signature || typeof signature !== "string") {
+        await updateWebhookLog(log.id, {
+          status: WebhookEventStatus.FAILED,
+          httpStatus: 401,
+          errorMessage: "Missing mux-signature header"
+        });
+        return reply.status(401).send({ error: "Missing mux-signature header" });
+      }
+
+      if (!rawBody) {
+        await updateWebhookLog(log.id, {
+          status: WebhookEventStatus.FAILED,
+          httpStatus: 400,
+          errorMessage: "Missing raw webhook body"
+        });
+        return reply.status(400).send({ error: "Missing raw webhook body" });
+      }
+
+      try {
+        verifyMuxWebhookSignature({
+          rawBody,
+          signatureHeader: signature,
+          secret: env.MUX_WEBHOOK_SECRET
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Invalid Mux webhook signature";
+        await updateWebhookLog(log.id, {
+          status: WebhookEventStatus.FAILED,
+          httpStatus: 401,
+          errorMessage: message
+        });
+        return reply.status(401).send({ error: "Invalid signature" });
+      }
     }
 
     const type = body.type ?? "";
