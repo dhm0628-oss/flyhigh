@@ -983,10 +983,17 @@ export async function registerContentRoutes(app: FastifyInstance) {
     }
 
     const requestOrigin = typeof request.headers.origin === "string" ? request.headers.origin : undefined;
-    const upload = await createMuxDirectUpload({
-      contentId: item.id,
-      corsOrigin: requestOrigin
-    });
+    let upload;
+    try {
+      upload = await createMuxDirectUpload({
+        contentId: item.id,
+        corsOrigin: requestOrigin
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Mux upload creation failed";
+      request.log.error({ contentId: item.id, muxOrigin: requestOrigin, err }, "mux.direct_upload_create_failed");
+      return reply.status(502).send({ error: message });
+    }
 
     await prisma.contentItem.update({
       where: { id: item.id },
@@ -1037,10 +1044,17 @@ export async function registerContentRoutes(app: FastifyInstance) {
       return badRequest(reply, err instanceof Error ? err.message : "Invalid sourceUrl");
     }
 
-    const asset = await createMuxAssetFromUrl({
-      contentId: item.id,
-      inputUrl: sourceUrl
-    });
+    let asset;
+    try {
+      asset = await createMuxAssetFromUrl({
+        contentId: item.id,
+        inputUrl: sourceUrl
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Mux URL import failed";
+      request.log.error({ contentId: item.id, sourceUrl, err }, "mux.url_import_create_failed");
+      return reply.status(502).send({ error: message });
+    }
 
     await prisma.contentItem.update({
       where: { id: item.id },
