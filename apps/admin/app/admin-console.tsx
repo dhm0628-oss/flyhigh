@@ -722,6 +722,7 @@ export function AdminConsole() {
   const [newCollection, setNewCollection] = useState({ key: "", title: "", sourceTag: "", sourceLimit: 24, sortOrder: 0, isPublic: true });
   const [uploadContentId, setUploadContentId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [singleUploadProgress, setSingleUploadProgress] = useState(0);
   const [importSourceUrl, setImportSourceUrl] = useState("");
   const [batchUploadRows, setBatchUploadRows] = useState<BatchLocalUploadRow[]>([]);
   const [batchUploadConcurrency, setBatchUploadConcurrency] = useState(2);
@@ -733,6 +734,8 @@ export function AdminConsole() {
   const [posterUploadFile, setPosterUploadFile] = useState<File | null>(null);
   const [contentQuery, setContentQuery] = useState("");
   const [contentStatusFilter, setContentStatusFilter] = useState("all");
+  const [contentMediaFilter, setContentMediaFilter] = useState("all");
+  const [batchUploadFilter, setBatchUploadFilter] = useState("all");
   const [subscriberQuery, setSubscriberQuery] = useState("");
   const [subscriberStatusFilter, setSubscriberStatusFilter] = useState("all");
   const [editContentId, setEditContentId] = useState("");
@@ -777,12 +780,28 @@ export function AdminConsole() {
     const q = contentQuery.trim().toLowerCase();
     return content.filter((item) => {
       if (contentStatusFilter !== "all" && item.publishStatus !== contentStatusFilter) return false;
+      if (contentMediaFilter === "missing-playback" && (item.playbackUrl || item.muxPlaybackId)) return false;
+      if (contentMediaFilter === "missing-poster" && item.posterUrl) return false;
+      if (contentMediaFilter === "mux-processing" && item.videoStatus !== "processing" && item.videoStatus !== "upload_created") return false;
+      if (contentMediaFilter === "mux-errored" && item.videoStatus !== "errored") return false;
+      if (contentMediaFilter === "ready" && !item.muxPlaybackId && !item.playbackUrl) return false;
       if (!q) return true;
       const hay = `${item.title} ${item.slug} ${item.synopsis ?? ""} ${(item.tags ?? []).join(" ")}`.toLowerCase();
       const hayWithAuthor = `${hay} ${item.author ?? ""}`.toLowerCase();
       return hayWithAuthor.includes(q);
     });
-  }, [content, contentQuery, contentStatusFilter]);
+  }, [content, contentMediaFilter, contentQuery, contentStatusFilter]);
+  const filteredBatchUploadRows = useMemo(() => {
+    return batchUploadRows.filter((row) => {
+      if (batchUploadFilter === "all") return true;
+      if (batchUploadFilter === "matched") return row.status === "matched";
+      if (batchUploadFilter === "unmatched") return !row.contentId || row.status === "unmatched";
+      if (batchUploadFilter === "uploading") return row.status === "uploading";
+      if (batchUploadFilter === "processing") return row.status === "processing";
+      if (batchUploadFilter === "failed") return row.status === "failed";
+      return true;
+    });
+  }, [batchUploadFilter, batchUploadRows]);
   const contentBySlug = useMemo(
     () => new Map(content.map((item) => [item.slug, item])),
     [content]
@@ -1592,6 +1611,7 @@ export function AdminConsole() {
     setBusy("mux-upload");
     setError(null);
     setNotice(null);
+    setSingleUploadProgress(0);
 
     try {
       const upload = await api<{ uploadUrl: string; uploadId: string; provider: string }>(
@@ -1599,18 +1619,13 @@ export function AdminConsole() {
         { method: "POST", body: JSON.stringify({}) }
       );
 
-      const putRes = await fetch(upload.uploadUrl, {
-        method: "PUT",
-        body: uploadFile,
-        headers: uploadFile.type ? { "Content-Type": uploadFile.type } : undefined
+      await uploadFileToMux(upload.uploadUrl, uploadFile, (progress) => {
+        setSingleUploadProgress(progress);
       });
-
-      if (!putRes.ok) {
-        throw new Error(`Mux upload failed (${putRes.status})`);
-      }
 
       setNotice("Upload complete. Mux is processing the video now.");
       setUploadFile(null);
+      setSingleUploadProgress(100);
       await loadAdminData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Video upload failed");
@@ -2647,6 +2662,11 @@ export function AdminConsole() {
                   >
                     {busy === "mux-import-url" ? "Importing..." : "Import From URL"}
                   </button>
+                  {busy === "mux-upload" ? (
+                    <div className="label" style={{ marginTop: "0.6rem" }}>
+                      Upload progress: {singleUploadProgress}%
+                    </div>
+                  ) : null}
                 </div>
               </form>
             </div>
@@ -2655,6 +2675,21 @@ export function AdminConsole() {
               <div className="row__header">
                 <h2 className="section-title">Batch Upload Local Files To Mux</h2>
                 <div className="row-actions">
+                  <label>
+                    Show
+                    <select
+                      value={batchUploadFilter}
+                      onChange={(e) => setBatchUploadFilter(e.target.value)}
+                      style={{ marginLeft: "0.5rem", marginRight: "0.75rem" }}
+                    >
+                      <option value="all">All</option>
+                      <option value="unmatched">Unmatched</option>
+                      <option value="matched">Matched</option>
+                      <option value="uploading">Uploading</option>
+                      <option value="processing">Processing</option>
+                      <option value="failed">Failed</option>
+                    </select>
+                  </label>
                   <label>
                     Concurrency
                     <select
@@ -2708,7 +2743,7 @@ export function AdminConsole() {
                       </tr>
                     </thead>
                     <tbody>
-                      {batchUploadRows.map((row) => {
+                      {filteredBatchUploadRows.map((row) => {
                         const matchedItem = content.find((item) => item.id === row.contentId);
                         return (
                           <tr key={row.key}>
@@ -2741,6 +2776,9 @@ export function AdminConsole() {
                       })}
                     </tbody>
                   </table>
+                  <div className="label" style={{ marginTop: "0.5rem" }}>
+                    Showing {filteredBatchUploadRows.length} of {batchUploadRows.length} rows.
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -2928,6 +2966,16 @@ export function AdminConsole() {
                     <option value="draft">Draft</option>
                     <option value="scheduled">Scheduled</option>
                     <option value="archived">Archived</option>
+                  </select>
+                </label>
+                <label>Media
+                  <select value={contentMediaFilter} onChange={(e) => setContentMediaFilter(e.target.value)}>
+                    <option value="all">All media states</option>
+                    <option value="missing-playback">Missing playback</option>
+                    <option value="missing-poster">Missing poster</option>
+                    <option value="mux-processing">Mux processing</option>
+                    <option value="mux-errored">Mux errored</option>
+                    <option value="ready">Playback ready</option>
                   </select>
                 </label>
               </div>
