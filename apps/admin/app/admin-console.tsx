@@ -723,6 +723,7 @@ export function AdminConsole() {
   const [uploadContentId, setUploadContentId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [singleUploadProgress, setSingleUploadProgress] = useState(0);
+  const [singleUploadPhase, setSingleUploadPhase] = useState<"idle" | "uploading" | "processing">("idle");
   const [importSourceUrl, setImportSourceUrl] = useState("");
   const [batchUploadRows, setBatchUploadRows] = useState<BatchLocalUploadRow[]>([]);
   const [batchUploadConcurrency, setBatchUploadConcurrency] = useState(2);
@@ -1612,6 +1613,7 @@ export function AdminConsole() {
     setError(null);
     setNotice(null);
     setSingleUploadProgress(0);
+    setSingleUploadPhase("uploading");
 
     try {
       const upload = await api<{ uploadUrl: string; uploadId: string; provider: string }>(
@@ -1623,6 +1625,7 @@ export function AdminConsole() {
         setSingleUploadProgress(progress);
       });
 
+      setSingleUploadPhase("processing");
       setNotice("Upload complete. Mux is processing the video now.");
       setUploadFile(null);
       setSingleUploadProgress(100);
@@ -2663,9 +2666,18 @@ export function AdminConsole() {
                     {busy === "mux-import-url" ? "Importing..." : "Import From URL"}
                   </button>
                   {busy === "mux-upload" ? (
-                    <div className="label" style={{ marginTop: "0.6rem" }}>
-                      Upload progress: {singleUploadProgress}%
-                    </div>
+                    <>
+                      <div className="label" style={{ marginTop: "0.6rem" }}>
+                        {singleUploadPhase === "uploading"
+                          ? `Uploading file: ${singleUploadProgress}%`
+                          : "File uploaded. Waiting for Mux processing webhook..."}
+                      </div>
+                      {singleUploadPhase === "processing" ? (
+                        <div className="label" style={{ marginTop: "0.25rem" }}>
+                          You can leave this page open and refresh later to see the content item move to ready.
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
                 </div>
               </form>
