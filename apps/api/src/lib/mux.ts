@@ -99,5 +99,5 @@ export function getMuxPlaybackUrl(playbackId: string): string {
 }
 
 export function getMuxPosterUrl(playbackId: string): string {
-  return `https://image.mux.com/${playbackId}/thumbnail.jpg?time=1`;
+  return `https://image.mux.com/${playbackId}/thumbnail.jpg?time=5`;
 }

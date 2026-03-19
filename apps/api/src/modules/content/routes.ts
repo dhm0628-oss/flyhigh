@@ -73,8 +73,13 @@ function parsePublishStatus(value?: string): PublishStatus | undefined {
 }
 
 function resolvePosterUrl(item: { posterUrl: string; muxPlaybackId?: string | null }): string {
-  if (item.posterUrl?.trim()) {
-    return item.posterUrl;
+  const posterUrl = item.posterUrl?.trim() ?? "";
+  const isPlaceholderPoster =
+    !posterUrl ||
+    posterUrl === "/home/hero-banner.jpg";
+
+  if (!isPlaceholderPoster) {
+    return posterUrl;
   }
   if (item.muxPlaybackId) {
     return getMuxPosterUrl(item.muxPlaybackId);
