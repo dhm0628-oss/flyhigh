@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ContentType, PublishStatus, Role } from "@prisma/client";
+import { ContentType, Prisma, PublishStatus, Role } from "@prisma/client";
 import type { WatchProgress } from "@prisma/client";
 import type { ContentCard, HomeFeedResponse } from "@flyhigh/contracts";
 import { sendOpsAlert } from "../../lib/alerts.js";
@@ -81,6 +81,13 @@ function resolvePosterUrl(item: { posterUrl: string; muxPlaybackId?: string | nu
   }
   return "";
 }
+
+const contentHasPlaybackWhere: Prisma.ContentItemWhereInput = {
+  OR: [
+    { muxPlaybackId: { not: null } },
+    { playbackUrl: { not: null } }
+  ]
+};
 
 function normalizeIngestUrl(raw: string): string {
   const trimmed = raw.trim();
@@ -267,15 +274,9 @@ export async function registerContentRoutes(app: FastifyInstance) {
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.floor(limitRaw))) : 48;
     const offset = Number.isFinite(offsetRaw) ? Math.max(0, Math.floor(offsetRaw)) : 0;
 
-    const where: {
-      publishStatus: PublishStatus;
-      type?: ContentType;
-      isPremium?: boolean;
-      tags?: { has: string };
-      author?: { equals: string; mode: "insensitive" };
-      OR?: Array<{ title?: { contains: string; mode: "insensitive" }; synopsis?: { contains: string; mode: "insensitive" }; tags?: { has: string }; author?: { contains: string; mode: "insensitive" } }>;
-    } = {
-      publishStatus: PublishStatus.PUBLISHED
+    const where: Prisma.ContentItemWhereInput = {
+      publishStatus: PublishStatus.PUBLISHED,
+      AND: [contentHasPlaybackWhere]
     };
 
     if (parsedType) {
@@ -328,7 +329,10 @@ export async function registerContentRoutes(app: FastifyInstance) {
 
   app.get("/v1/content/tags", async () => {
     const rows = await prisma.contentItem.findMany({
-      where: { publishStatus: PublishStatus.PUBLISHED },
+      where: {
+        publishStatus: PublishStatus.PUBLISHED,
+        AND: [contentHasPlaybackWhere]
+      },
       select: { tags: true }
     });
 
@@ -350,7 +354,11 @@ export async function registerContentRoutes(app: FastifyInstance) {
 
   app.get("/v1/content/authors", async () => {
     const rows = await prisma.contentItem.findMany({
-      where: { publishStatus: PublishStatus.PUBLISHED, author: { not: null } },
+      where: {
+        publishStatus: PublishStatus.PUBLISHED,
+        author: { not: null },
+        AND: [contentHasPlaybackWhere]
+      },
       select: { author: true }
     });
 
