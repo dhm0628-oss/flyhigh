@@ -1645,10 +1645,49 @@ a {
   margin-bottom: 1.25rem;
 }
 
+.ott-rail__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+}
+
 .ott-rail__title {
-  margin: 0 0 0.65rem;
+  margin: 0;
   font-size: 1.35rem;
   color: #f6f8fc;
+}
+
+.ott-rail__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.ott-rail__hint {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9eb1c9;
+}
+
+.ott-rail__button {
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 1px solid #2a3342;
+  border-radius: 999px;
+  background: #111824;
+  color: #eef3fa;
+  cursor: pointer;
+  transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+}
+
+.ott-rail__button:hover,
+.ott-rail__button:focus-visible {
+  border-color: #7dd3fc;
+  background: #152131;
+  transform: translateY(-1px);
 }
 
 .ott-rail__track {
@@ -1657,6 +1696,7 @@ a {
   overflow-x: auto;
   padding-bottom: 0.4rem;
   scrollbar-width: thin;
+  scroll-behavior: smooth;
 }
 
 .catalog-card--ott {
@@ -1717,6 +1757,15 @@ a {
   .browse-summary {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .ott-rail__header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ott-rail__actions {
+    justify-content: space-between;
   }
 }
 
