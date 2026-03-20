@@ -26,6 +26,7 @@ function OttRail({
   onSelect: (item: ContentCard) => void;
 }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
+  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   function scrollByCard(direction: "left" | "right") {
     const track = trackRef.current;
@@ -36,6 +37,18 @@ function OttRail({
       behavior: "smooth"
     });
   }
+
+  useEffect(() => {
+    if (!activeSlug) return;
+    const track = trackRef.current;
+    const activeCard = itemRefs.current[activeSlug];
+    if (!track || !activeCard) return;
+    activeCard.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center"
+    });
+  }, [activeSlug]);
 
   return (
     <section className="ott-rail">
@@ -67,6 +80,9 @@ function OttRail({
             type="button"
             className={`catalog-card catalog-card--ott ott-card-button ${activeSlug === item.slug ? "is-active" : ""}`}
             key={`${title}-${item.id}`}
+            ref={(node) => {
+              itemRefs.current[item.slug] = node;
+            }}
             onClick={() => onSelect(item)}
           >
             <article>

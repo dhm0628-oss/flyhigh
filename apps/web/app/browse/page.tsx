@@ -127,9 +127,20 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
   const sort = normalizeSort(first(params.sort));
   const page = Math.max(1, Number.parseInt(first(params.page) || "1", 10) || 1);
   const limit = 24;
+  const allVideosLimit = 500;
 
-  const [catalog, tags, authors] = await Promise.all([
+  const [catalog, allVideosCatalog, tags, authors] = await Promise.all([
     getCatalog({ q, type, access, tag, author, sort, page, limit }),
+    getCatalog({
+      q: "",
+      type: "all",
+      access: "all",
+      tag: "all",
+      author: "all",
+      sort: "featured",
+      page: 1,
+      limit: allVideosLimit
+    }),
     getTags(),
     getAuthors()
   ]);
@@ -146,7 +157,7 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
   const series = catalog.items.filter((item) => item.type === "series");
   const freeNow = catalog.items.filter((item) => !item.isPremium);
   const rails: Array<{ title: string; items: ContentCard[] }> = [
-    { title: "Browse All", items: catalog.items },
+    { title: "All Videos", items: allVideosCatalog.items },
     { title: "Trending Now", items: catalog.items.slice(0, 12) },
     { title: "Films", items: films.slice(0, 12) },
     { title: "Series & Episodes", items: [...series, ...episodes].slice(0, 12) },
