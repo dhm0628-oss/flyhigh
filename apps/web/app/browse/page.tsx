@@ -262,6 +262,48 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
                 <OttRail key={rail.title} title={rail.title} items={rail.items} />
               ))}
 
+              <section className="ott-rail">
+                <div className="ott-rail__header">
+                  <h2 className="ott-rail__title">All Titles</h2>
+                  <div className="ott-rail__actions">
+                    <span className="ott-rail__hint">Full page grid</span>
+                  </div>
+                </div>
+                <div className="content browse-grid browse-grid--catalog">
+                  {catalog.items.map((item) => (
+                    <Link className="catalog-card catalog-card--clean catalog-card--ott" key={`grid-${item.id}`} href={`/watch/${item.slug}`}>
+                      <article>
+                        {item.previewUrl ? (
+                          <video
+                            className="catalog-card__poster catalog-card__poster--ott catalog-card__preview-video"
+                            autoPlay
+                            muted
+                            loop
+                            playsInline
+                            preload="metadata"
+                            poster={item.posterUrl || undefined}
+                          >
+                            <source src={item.previewUrl} type="application/x-mpegURL" />
+                          </video>
+                        ) : (
+                          <div
+                            className="catalog-card__poster catalog-card__poster--ott"
+                            style={item.posterUrl ? { backgroundImage: `url(${item.posterUrl})` } : undefined}
+                          />
+                        )}
+                        <div className="catalog-card__body catalog-card__body--ott catalog-card__body--tight">
+                          <strong>{item.title}</strong>
+                          <div className="card__meta">
+                            {item.type} | {item.releaseYear ?? "n/a"} | {Math.round(item.durationSeconds / 60)} min
+                          </div>
+                          <div className="card__meta">{item.isPremium ? "Subscriber only" : "Free"}</div>
+                        </div>
+                      </article>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+
               <div className="browse-pagination">
                 <a
                   className={`btn btn--secondary ${currentPage <= 1 ? "is-disabled" : ""}`}
