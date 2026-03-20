@@ -6,10 +6,13 @@ import type { WatchProgress } from "@prisma/client";
 import type { ContentCard, HomeFeedResponse } from "@flyhigh/contracts";
 import { sendOpsAlert } from "../../lib/alerts.js";
 import { badRequest, forbidden, notFound, unauthorized } from "../../lib/http.js";
-import { createMuxAssetFromUrl, createMuxDirectUpload, getMuxPlaybackUrl, getMuxPosterUrl, isMuxConfigured } from "../../lib/mux.js";
+import { createMuxAssetClip, createMuxAssetFromUrl, createMuxDirectUpload, getMuxPlaybackUrl, getMuxPosterUrl, isMuxConfigured } from "../../lib/mux.js";
 import { prisma } from "../../lib/prisma.js";
 import { getAuthContext, hasActiveEntitlement } from "../../lib/viewer.js";
 import { ensurePosterUploadsDir, extFromMimeType, getPosterUploadsDir, MAX_POSTER_UPLOAD_BYTES } from "../../lib/uploads.js";
+
+const PREVIEW_PASSTHROUGH_PREFIX = "preview:";
+const AUTO_PREVIEW_DURATION_SECONDS = 10;
 
 function mapContentCard(item: {
   id: string;
@@ -1215,6 +1218,94 @@ export async function registerContentRoutes(app: FastifyInstance) {
       total: rows.length,
       successCount,
       failedCount: rows.length - successCount,
+      results
+    };
+  });
+
+  app.post("/v1/admin/content/backfill-premium-previews", async (request, reply) => {
+    const auth = await requireAdmin(app, request, reply);
+    if (!auth) {
+      return;
+    }
+
+    if (!isMuxConfigured()) {
+      return reply.status(503).send({ error: "Mux is not configured on the server" });
+    }
+
+    const body = (request.body ?? {}) as { limit?: number };
+    const limit =
+      typeof body.limit === "number"
+        ? Math.max(1, Math.min(200, Math.round(body.limit)))
+        : 50;
+
+    const candidates = await prisma.contentItem.findMany({
+      where: {
+        isPremium: true,
+        muxAssetId: { not: null },
+        heroPreviewUrl: null,
+        videoStatus: "ready"
+      },
+      orderBy: [{ updatedAt: "desc" }],
+      take: limit,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        muxAssetId: true,
+        durationSeconds: true
+      }
+    });
+
+    const results: Array<{
+      contentId: string;
+      slug: string;
+      title: string;
+      ok: boolean;
+      error?: string;
+    }> = [];
+
+    for (const item of candidates) {
+      try {
+        if (!item.muxAssetId) {
+          throw new Error("Missing muxAssetId");
+        }
+
+        const clipEndTime = Math.max(
+          1,
+          Math.min(
+            AUTO_PREVIEW_DURATION_SECONDS,
+            item.durationSeconds > 0 ? item.durationSeconds : AUTO_PREVIEW_DURATION_SECONDS
+          )
+        );
+
+        await createMuxAssetClip({
+          sourceAssetId: item.muxAssetId,
+          passthrough: `${PREVIEW_PASSTHROUGH_PREFIX}${item.id}`,
+          startTime: 0,
+          endTime: clipEndTime
+        });
+
+        results.push({
+          contentId: item.id,
+          slug: item.slug,
+          title: item.title,
+          ok: true
+        });
+      } catch (err) {
+        results.push({
+          contentId: item.id,
+          slug: item.slug,
+          title: item.title,
+          ok: false,
+          error: err instanceof Error ? err.message : "Preview backfill failed"
+        });
+      }
+    }
+
+    return {
+      total: candidates.length,
+      queued: results.filter((item) => item.ok).length,
+      failed: results.filter((item) => !item.ok).length,
       results
     };
   });

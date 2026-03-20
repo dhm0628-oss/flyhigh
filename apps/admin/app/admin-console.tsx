@@ -1590,6 +1590,30 @@ export function AdminConsole() {
     setNotice("Content CSV exported");
   }
 
+  async function onBackfillPremiumPreviews() {
+    setBusy("backfill-premium-previews");
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await api<{
+        total: number;
+        queued: number;
+        failed: number;
+      }>("/v1/admin/content/backfill-premium-previews", {
+        method: "POST",
+        body: JSON.stringify({ limit: 100 })
+      });
+      await loadAdminData();
+      setNotice(
+        `Premium preview backfill queued ${res.queued} teaser clip${res.queued === 1 ? "" : "s"}${res.failed ? `, ${res.failed} failed` : ""}.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to backfill premium previews");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function onCreateContent(e: FormEvent) {
     e.preventDefault();
     setBusy("create-content");
@@ -3019,6 +3043,9 @@ export function AdminConsole() {
               <div className="table-head">
                 <h2 className="section-title">Content Library</h2>
                 <div className="row-actions" style={{ marginTop: "0.6rem" }}>
+                  <button className="btn btn-secondary" disabled={busy === "backfill-premium-previews"} onClick={() => void onBackfillPremiumPreviews()}>
+                    {busy === "backfill-premium-previews" ? "Queuing Premium Previews..." : "Backfill Premium Previews"}
+                  </button>
                   <button className="btn btn-secondary" onClick={exportContentCsv}>Export Content CSV</button>
                 </div>
               </div>
