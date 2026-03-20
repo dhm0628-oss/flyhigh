@@ -1547,6 +1547,38 @@ export function AdminConsole() {
     setNotice("Video analytics CSV exported");
   }
 
+  function exportContentCsv() {
+    if (!content.length) {
+      setNotice("No content rows to export");
+      return;
+    }
+
+    exportCsv(
+      `content-catalog-${toInputDate(new Date())}.csv`,
+      content.map((item) => ({
+        id: item.id,
+        slug: item.slug,
+        title: item.title,
+        author: item.author ?? "",
+        type: item.type,
+        publish_status: item.publishStatus,
+        is_premium: item.isPremium,
+        synopsis: item.synopsis ?? "",
+        poster_url: item.posterUrl ?? "",
+        hero_preview_url: item.heroPreviewUrl ?? "",
+        playback_url: item.playbackUrl ?? "",
+        duration_seconds: item.durationSeconds ?? 0,
+        release_year: item.releaseYear ?? "",
+        tags: (item.tags ?? []).join(", "),
+        video_status: item.videoStatus ?? "",
+        video_provider: item.videoProvider ?? "",
+        mux_asset_id: item.muxAssetId ?? "",
+        mux_playback_id: item.muxPlaybackId ?? ""
+      }))
+    );
+    setNotice("Content CSV exported");
+  }
+
   async function onCreateContent(e: FormEvent) {
     e.preventDefault();
     setBusy("create-content");
@@ -2966,7 +2998,12 @@ export function AdminConsole() {
             </div>
 
             <div className="table">
-              <div className="table-head"><h2 className="section-title">Content Library</h2></div>
+              <div className="table-head">
+                <h2 className="section-title">Content Library</h2>
+                <div className="row-actions" style={{ marginTop: "0.6rem" }}>
+                  <button className="btn btn-secondary" onClick={exportContentCsv}>Export Content CSV</button>
+                </div>
+              </div>
               <div className="form-grid two-col" style={{ padding: "0.75rem 1rem 0" }}>
                 <label>Search
                   <input value={contentQuery} onChange={(e) => setContentQuery(e.target.value)} placeholder="Title, slug, tags..." />
