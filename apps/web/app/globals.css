@@ -1688,7 +1688,7 @@ a {
 }
 
 .page--ott-catalog {
-  --browse-stage-width: 1180px;
+  --browse-stage-width: 1080px;
 }
 
 .page--ott-catalog .watch-hero__inner,
@@ -1714,6 +1714,10 @@ a {
 
 .page--ott-catalog .browse-banner {
   border-color: #2a3342;
+  width: 100%;
+  max-width: var(--browse-stage-width);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .page--ott-catalog .browse-banner--interactive {
@@ -1725,6 +1729,10 @@ a {
 
 .ott-rail {
   margin-bottom: 1.25rem;
+  width: 100%;
+  max-width: var(--browse-stage-width);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .ott-rail__header {
@@ -1785,6 +1793,7 @@ a {
 .ott-rail__viewport {
   position: relative;
   width: 100%;
+  overflow: hidden;
 }
 
 .ott-rail__track {
@@ -1792,6 +1801,7 @@ a {
   gap: 0.9rem;
   overflow-x: auto;
   padding: 0 3.25rem 0.4rem;
+  width: 100%;
   scrollbar-width: thin;
   scroll-behavior: smooth;
 }
@@ -1880,6 +1890,14 @@ a {
   gap: 0.28rem;
   padding: 0.75rem;
   color: #eef3fa;
+}
+
+.page--ott-catalog .browse-summary,
+.page--ott-catalog .browse-pagination {
+  width: 100%;
+  max-width: var(--browse-stage-width);
+  margin-left: auto;
+  margin-right: auto;
 }
 
 @media (min-width: 1024px) {
