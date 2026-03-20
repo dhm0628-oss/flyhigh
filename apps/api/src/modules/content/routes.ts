@@ -36,10 +36,10 @@ function mapContentCard(item: {
     type: item.type.toLowerCase() as ContentCard["type"],
     posterUrl: resolvePosterUrl(item),
     previewUrl:
-      item.isPremium
-        ? undefined
-        : item.heroPreviewUrl?.trim()
-          ? item.heroPreviewUrl
+      item.heroPreviewUrl?.trim()
+        ? item.heroPreviewUrl
+        : item.isPremium
+          ? undefined
           : item.muxPlaybackId
             ? getMuxPlaybackUrl(item.muxPlaybackId)
             : item.playbackUrl ?? undefined,

@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type Stripe from "stripe";
 import { SubscriptionStatus, WebhookEventStatus, WebhookProvider } from "@prisma/client";
 import { sendOpsAlert } from "../../lib/alerts.js";
+import { createMuxAssetClip, getMuxPlaybackUrl } from "../../lib/mux.js";
 import { prisma } from "../../lib/prisma.js";
 import { env } from "../../lib/env.js";
 import { forbidden, unauthorized } from "../../lib/http.js";
@@ -22,6 +23,9 @@ type MuxWebhookEvent = {
     playback_ids?: Array<{ id?: string; policy?: string }>;
   };
 };
+
+const PREVIEW_PASSTHROUGH_PREFIX = "preview:";
+const AUTO_PREVIEW_DURATION_SECONDS = 10;
 
 async function requireAdmin(request: any, reply: any) {
   const auth = await getAuthContext(request);
@@ -253,6 +257,25 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
 
       if (type === "video.asset.ready" && data.id) {
         const playbackId = data.playback_ids?.[0]?.id ?? null;
+        const passthrough = data.passthrough?.trim() ?? "";
+
+        if (passthrough.startsWith(PREVIEW_PASSTHROUGH_PREFIX)) {
+          const contentId = passthrough.slice(PREVIEW_PASSTHROUGH_PREFIX.length);
+          if (contentId) {
+            await prisma.contentItem.updateMany({
+              where: { id: contentId },
+              data: {
+                heroPreviewUrl: playbackId ? getMuxPlaybackUrl(playbackId) : null
+              }
+            });
+          }
+          await updateWebhookLog(log.id, {
+            status: WebhookEventStatus.PROCESSED,
+            httpStatus: 200
+          });
+          return { ok: true };
+        }
+
         const updateData: Record<string, unknown> = {
           muxAssetId: data.id,
           muxPlaybackId: playbackId,
@@ -276,6 +299,46 @@ export async function registerWebhookRoutes(app: FastifyInstance) {
 
         if (!updated) {
           await updateByMuxAssetId(data.id, updateData);
+        }
+
+        const contentId = passthrough;
+        if (contentId) {
+          const content = await prisma.contentItem.findUnique({
+            where: { id: contentId },
+            select: {
+              id: true,
+              isPremium: true,
+              heroPreviewUrl: true,
+              durationSeconds: true,
+              muxAssetId: true
+            }
+          });
+
+          if (
+            content &&
+            content.isPremium &&
+            !content.heroPreviewUrl &&
+            content.muxAssetId
+          ) {
+            const clipEndTime = Math.max(
+              1,
+              Math.min(
+                AUTO_PREVIEW_DURATION_SECONDS,
+                content.durationSeconds > 0 ? content.durationSeconds : AUTO_PREVIEW_DURATION_SECONDS
+              )
+            );
+
+            try {
+              await createMuxAssetClip({
+                sourceAssetId: content.muxAssetId,
+                passthrough: `${PREVIEW_PASSTHROUGH_PREFIX}${content.id}`,
+                startTime: 0,
+                endTime: clipEndTime
+              });
+            } catch (err) {
+              app.log.error({ contentId: content.id, muxAssetId: content.muxAssetId, err }, "mux.preview_clip_create_failed");
+            }
+          }
         }
       }
 

@@ -78,6 +78,31 @@ export async function createMuxDirectUpload(params: {
   return payload.data;
 }
 
+export async function createMuxAssetClip(params: {
+  sourceAssetId: string;
+  passthrough: string;
+  startTime?: number;
+  endTime: number;
+}): Promise<MuxAssetCreateResponse["data"]> {
+  const payload = await muxRequest<MuxAssetCreateResponse>("/video/v1/assets", {
+    method: "POST",
+    body: JSON.stringify({
+      inputs: [
+        {
+          url: `mux://assets/${params.sourceAssetId}`,
+          start_time: Math.max(0, params.startTime ?? 0),
+          end_time: Math.max(0.5, params.endTime)
+        }
+      ],
+      playback_policies: ["public"],
+      video_quality: "basic",
+      passthrough: params.passthrough
+    })
+  });
+
+  return payload.data;
+}
+
 export async function createMuxAssetFromUrl(params: {
   contentId: string;
   inputUrl: string;

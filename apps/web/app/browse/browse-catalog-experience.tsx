@@ -152,7 +152,7 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
   }, [rails]);
 
   const [selectedSlug, setSelectedSlug] = useState(initialItem?.slug ?? allItems[0]?.slug ?? "");
-  const [previewActive, setPreviewActive] = useState(false);
+  const heroVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const activeItem =
     allItems.find((item) => item.slug === selectedSlug) ??
@@ -161,16 +161,22 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
     null;
 
   useEffect(() => {
-    if (!activeItem?.previewUrl) {
-      setPreviewActive(false);
-      return;
-    }
-    setPreviewActive(true);
-    const timer = window.setTimeout(() => {
-      setPreviewActive(false);
-    }, 8000);
-    return () => window.clearTimeout(timer);
+    const video = heroVideoRef.current;
+    if (!video || !activeItem?.previewUrl) return;
+
+    video.currentTime = 0;
+    void video.play().catch(() => {
+      // Ignore autoplay rejections; the poster remains visible.
+    });
   }, [activeItem?.id, activeItem?.previewUrl]);
+
+  function handleHeroTimeUpdate() {
+    const video = heroVideoRef.current;
+    if (!video) return;
+    if (video.currentTime >= 10) {
+      video.pause();
+    }
+  }
 
   return (
     <>
@@ -180,15 +186,17 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
             className="browse-banner__media"
             style={{ backgroundImage: `url('${activeItem.posterUrl || "/home/hero-banner.jpg"}')` }}
           />
-          {activeItem.previewUrl && previewActive ? (
+          {activeItem.previewUrl ? (
             <video
               key={activeItem.id}
+              ref={heroVideoRef}
               className="browse-banner__video"
               autoPlay
               muted
               playsInline
               preload="metadata"
               poster={activeItem.posterUrl || undefined}
+              onTimeUpdate={handleHeroTimeUpdate}
             >
               <source src={activeItem.previewUrl} type="application/x-mpegURL" />
             </video>
@@ -202,13 +210,6 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
               <Link className="btn btn--header-primary" href={`/watch/${activeItem.slug}`}>
                 Watch Now
               </Link>
-              <button
-                type="button"
-                className="btn btn--secondary"
-                onClick={() => setPreviewActive((current) => !current)}
-              >
-                {previewActive ? "Pause Preview" : "Play Preview"}
-              </button>
             </div>
           </div>
         </div>
