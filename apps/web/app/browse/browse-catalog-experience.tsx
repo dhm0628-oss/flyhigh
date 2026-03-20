@@ -95,24 +95,10 @@ function OttRail({
               onClick={() => onSelect(item)}
             >
               <article>
-                {item.previewUrl ? (
-                  <video
-                    className="catalog-card__poster catalog-card__poster--ott catalog-card__preview-video"
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    preload="metadata"
-                    poster={item.posterUrl || undefined}
-                  >
-                    <source src={item.previewUrl} type="application/x-mpegURL" />
-                  </video>
-                ) : (
-                  <div
-                    className="catalog-card__poster catalog-card__poster--ott"
-                    style={item.posterUrl ? { backgroundImage: `url(${item.posterUrl})` } : undefined}
-                  />
-                )}
+                <div
+                  className="catalog-card__poster catalog-card__poster--ott"
+                  style={item.posterUrl ? { backgroundImage: `url(${item.posterUrl})` } : undefined}
+                />
                 <div className="catalog-card__body catalog-card__body--ott">
                   <strong>{item.title}</strong>
                   <div className="card__meta">
