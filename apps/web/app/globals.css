@@ -1687,6 +1687,15 @@ a {
   background: #05070d;
 }
 
+.page--ott-catalog {
+  --browse-stage-width: 1180px;
+}
+
+.page--ott-catalog .watch-hero__inner,
+.page--ott-catalog .theme-container {
+  max-width: var(--browse-stage-width);
+}
+
 .page--ott-catalog .watch-hero {
   border-bottom: 1px solid #1a1f2b;
 }
@@ -1775,6 +1784,7 @@ a {
 
 .ott-rail__viewport {
   position: relative;
+  width: 100%;
 }
 
 .ott-rail__track {
