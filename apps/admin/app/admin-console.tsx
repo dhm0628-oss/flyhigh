@@ -291,7 +291,7 @@ type BatchLocalUploadRow = {
   fileName: string;
   guessedSlug: string;
   contentId: string;
-  status: "matched" | "unmatched" | "uploading" | "processing" | "failed";
+  status: "matched" | "unmatched" | "blocked_existing" | "uploading" | "processing" | "failed";
   progress: number;
   error?: string;
 };
@@ -349,6 +349,16 @@ async function uploadFileToMux(
     };
     xhr.send(file);
   });
+}
+
+function getExistingVideoGuard(item: ContentItem | undefined): string | null {
+  if (!item) return null;
+  if (item.muxPlaybackId) return "Already has a ready Mux video";
+  if (item.playbackUrl) return "Already has a playback URL";
+  if (item.muxAssetId || ["upload_created", "processing", "ready"].includes(item.videoStatus ?? "")) {
+    return "Already has a Mux upload or asset in progress";
+  }
+  return null;
 }
 
 async function fileToBase64(file: File): Promise<string> {
@@ -797,6 +807,7 @@ export function AdminConsole() {
       if (batchUploadFilter === "all") return true;
       if (batchUploadFilter === "matched") return row.status === "matched";
       if (batchUploadFilter === "unmatched") return !row.contentId || row.status === "unmatched";
+      if (batchUploadFilter === "blocked") return row.status === "blocked_existing";
       if (batchUploadFilter === "uploading") return row.status === "uploading";
       if (batchUploadFilter === "processing") return row.status === "processing";
       if (batchUploadFilter === "failed") return row.status === "failed";
@@ -1700,14 +1711,16 @@ export function AdminConsole() {
     const nextRows = Array.from(fileList).map((file, index) => {
       const guessedSlug = fileNameToSlug(file.name);
       const match = contentBySlug.get(guessedSlug);
+      const existingVideoGuard = getExistingVideoGuard(match);
       return {
         key: `${file.name}-${file.size}-${index}`,
         file,
         fileName: file.name,
         guessedSlug,
         contentId: match?.id ?? "",
-        status: match ? "matched" : "unmatched",
-        progress: 0
+        status: match ? (existingVideoGuard ? "blocked_existing" : "matched") : "unmatched",
+        progress: 0,
+        error: existingVideoGuard ?? undefined
       } satisfies BatchLocalUploadRow;
     });
 
@@ -1726,21 +1739,25 @@ export function AdminConsole() {
     setBatchUploadRows((current) =>
       current.map((row) =>
         row.key === key
-          ? {
-              ...row,
-              contentId,
-              status: contentId ? "matched" : "unmatched",
-              error: undefined
-            }
+          ? (() => {
+              const item = content.find((entry) => entry.id === contentId);
+              const existingVideoGuard = getExistingVideoGuard(item);
+              return {
+                ...row,
+                contentId,
+                status: contentId ? (existingVideoGuard ? "blocked_existing" : "matched") : "unmatched",
+                error: existingVideoGuard ?? undefined
+              };
+            })()
           : row
       )
     );
   }
 
   async function onStartBatchLocalUpload() {
-    const queuedRows = batchUploadRows.filter((row) => row.contentId);
+    const queuedRows = batchUploadRows.filter((row) => row.contentId && row.status === "matched");
     if (!queuedRows.length) {
-      setError("Load local files and match them to content items first");
+      setError("Load local files and match them to content items that do not already have video");
       return;
     }
 
@@ -2729,6 +2746,7 @@ export function AdminConsole() {
                       <option value="all">All</option>
                       <option value="unmatched">Unmatched</option>
                       <option value="matched">Matched</option>
+                      <option value="blocked">Already has video</option>
                       <option value="uploading">Uploading</option>
                       <option value="processing">Processing</option>
                       <option value="failed">Failed</option>
@@ -2766,7 +2784,7 @@ export function AdminConsole() {
                   <button
                     type="button"
                     className="btn btn-primary"
-                    disabled={busy === "mux-batch-upload" || !batchUploadRows.some((row) => row.contentId)}
+                    disabled={busy === "mux-batch-upload" || !batchUploadRows.some((row) => row.status === "matched")}
                     onClick={() => void onStartBatchLocalUpload()}
                   >
                     {busy === "mux-batch-upload" ? "Uploading..." : "Start Batch Upload"}
