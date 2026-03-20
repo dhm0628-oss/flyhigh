@@ -3,7 +3,7 @@ import type { ContentCard } from "@flyhigh/contracts";
 import { SiteFooter } from "../site-footer";
 import { SiteHeader } from "../site-header";
 import { BrowseSessionNote } from "./browse-session-note";
-import { OttRail } from "./ott-rail";
+import { BrowseCatalogExperience } from "./browse-catalog-experience";
 
 type CatalogResponse = {
   total: number;
@@ -146,6 +146,7 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
   const series = catalog.items.filter((item) => item.type === "series");
   const freeNow = catalog.items.filter((item) => !item.isPremium);
   const rails: Array<{ title: string; items: ContentCard[] }> = [
+    { title: "Browse All", items: catalog.items },
     { title: "Trending Now", items: catalog.items.slice(0, 12) },
     { title: "Films", items: films.slice(0, 12) },
     { title: "Series & Episodes", items: [...series, ...episodes].slice(0, 12) },
@@ -171,16 +172,6 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
               <BrowseSessionNote />
             </div>
           </div>
-          {bannerItem ? (
-            <div className="browse-banner">
-              <div className="browse-banner__media" style={{ backgroundImage: "url('/home/hero-banner.jpg')" }} />
-              <div className="browse-banner__overlay" />
-              <div className="browse-banner__content">
-                <span className="browse-banner__eyebrow">Featured in Catalog</span>
-                <strong>{bannerItem.title}</strong>
-              </div>
-            </div>
-          ) : null}
         </div>
       </section>
 
@@ -258,51 +249,7 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
 
           {catalog.items.length ? (
             <>
-              {rails.map((rail) => (
-                <OttRail key={rail.title} title={rail.title} items={rail.items} />
-              ))}
-
-              <section className="ott-rail">
-                <div className="ott-rail__header">
-                  <h2 className="ott-rail__title">All Titles</h2>
-                  <div className="ott-rail__actions">
-                    <span className="ott-rail__hint">Full page grid</span>
-                  </div>
-                </div>
-                <div className="content browse-grid browse-grid--catalog">
-                  {catalog.items.map((item) => (
-                    <Link className="catalog-card catalog-card--clean catalog-card--ott" key={`grid-${item.id}`} href={`/watch/${item.slug}`}>
-                      <article>
-                        {item.previewUrl ? (
-                          <video
-                            className="catalog-card__poster catalog-card__poster--ott catalog-card__preview-video"
-                            autoPlay
-                            muted
-                            loop
-                            playsInline
-                            preload="metadata"
-                            poster={item.posterUrl || undefined}
-                          >
-                            <source src={item.previewUrl} type="application/x-mpegURL" />
-                          </video>
-                        ) : (
-                          <div
-                            className="catalog-card__poster catalog-card__poster--ott"
-                            style={item.posterUrl ? { backgroundImage: `url(${item.posterUrl})` } : undefined}
-                          />
-                        )}
-                        <div className="catalog-card__body catalog-card__body--ott catalog-card__body--tight">
-                          <strong>{item.title}</strong>
-                          <div className="card__meta">
-                            {item.type} | {item.releaseYear ?? "n/a"} | {Math.round(item.durationSeconds / 60)} min
-                          </div>
-                          <div className="card__meta">{item.isPremium ? "Subscriber only" : "Free"}</div>
-                        </div>
-                      </article>
-                    </Link>
-                  ))}
-                </div>
-              </section>
+              <BrowseCatalogExperience initialItem={bannerItem} rails={rails} />
 
               <div className="browse-pagination">
                 <a
