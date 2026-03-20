@@ -55,65 +55,83 @@ function OttRail({
       <div className="ott-rail__header">
         <h2 className="ott-rail__title">{title}</h2>
         <div className="ott-rail__actions">
-          <span className="ott-rail__hint">Scroll for more</span>
+          <span className="ott-rail__hint">Use Next to browse more titles</span>
           <button
             type="button"
-            className="ott-rail__button"
+            className="ott-rail__button ott-rail__button--text"
             aria-label={`Scroll ${title} left`}
             onClick={() => scrollByCard("left")}
           >
-            {"<"}
+            Previous
           </button>
           <button
             type="button"
-            className="ott-rail__button"
+            className="ott-rail__button ott-rail__button--text"
             aria-label={`Scroll ${title} right`}
             onClick={() => scrollByCard("right")}
           >
-            {">"}
+            Next
           </button>
         </div>
       </div>
-      <div className="ott-rail__track" ref={trackRef}>
-        {items.map((item) => (
-          <button
-            type="button"
-            className={`catalog-card catalog-card--ott ott-card-button ${activeSlug === item.slug ? "is-active" : ""}`}
-            key={`${title}-${item.id}`}
-            ref={(node) => {
-              itemRefs.current[item.slug] = node;
-            }}
-            onClick={() => onSelect(item)}
-          >
-            <article>
-              {item.previewUrl ? (
-                <video
-                  className="catalog-card__poster catalog-card__poster--ott catalog-card__preview-video"
-                  autoPlay
-                  muted
-                  loop
-                  playsInline
-                  preload="metadata"
-                  poster={item.posterUrl || undefined}
-                >
-                  <source src={item.previewUrl} type="application/x-mpegURL" />
-                </video>
-              ) : (
-                <div
-                  className="catalog-card__poster catalog-card__poster--ott"
-                  style={item.posterUrl ? { backgroundImage: `url(${item.posterUrl})` } : undefined}
-                />
-              )}
-              <div className="catalog-card__body catalog-card__body--ott">
-                <strong>{item.title}</strong>
-                <div className="card__meta">
-                  {item.type} | {item.releaseYear ?? "n/a"} | {Math.round(item.durationSeconds / 60)} min
+      <div className="ott-rail__viewport">
+        <button
+          type="button"
+          className="ott-rail__side-button ott-rail__side-button--left"
+          aria-label={`Scroll ${title} left`}
+          onClick={() => scrollByCard("left")}
+        >
+          {"<"}
+        </button>
+        <div className="ott-rail__track" ref={trackRef}>
+          {items.map((item) => (
+            <button
+              type="button"
+              className={`catalog-card catalog-card--ott ott-card-button ${activeSlug === item.slug ? "is-active" : ""}`}
+              key={`${title}-${item.id}`}
+              ref={(node) => {
+                itemRefs.current[item.slug] = node;
+              }}
+              onClick={() => onSelect(item)}
+            >
+              <article>
+                {item.previewUrl ? (
+                  <video
+                    className="catalog-card__poster catalog-card__poster--ott catalog-card__preview-video"
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    poster={item.posterUrl || undefined}
+                  >
+                    <source src={item.previewUrl} type="application/x-mpegURL" />
+                  </video>
+                ) : (
+                  <div
+                    className="catalog-card__poster catalog-card__poster--ott"
+                    style={item.posterUrl ? { backgroundImage: `url(${item.posterUrl})` } : undefined}
+                  />
+                )}
+                <div className="catalog-card__body catalog-card__body--ott">
+                  <strong>{item.title}</strong>
+                  <div className="card__meta">
+                    {item.type} | {item.releaseYear ?? "n/a"} | {Math.round(item.durationSeconds / 60)} min
+                  </div>
+                  <div className="card__meta">{item.isPremium ? "Subscriber only" : "Free"}</div>
                 </div>
-                <div className="card__meta">{item.isPremium ? "Subscriber only" : "Free"}</div>
-              </div>
-            </article>
-          </button>
-        ))}
+              </article>
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className="ott-rail__side-button ott-rail__side-button--right"
+          aria-label={`Scroll ${title} right`}
+          onClick={() => scrollByCard("right")}
+        >
+          {">"}
+        </button>
       </div>
     </section>
   );
