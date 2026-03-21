@@ -1687,6 +1687,10 @@ a {
   background: #05070d;
 }
 
+.page--ott-catalog .theme-section--catalog {
+  overflow: visible;
+}
+
 .page--ott-catalog {
   --browse-stage-width: 1080px;
 }
@@ -1730,6 +1734,7 @@ a {
 .browse-catalog-experience {
   display: grid;
   gap: 0;
+  overflow: visible;
 }
 
 .page--ott-catalog .browse-banner--sticky {
