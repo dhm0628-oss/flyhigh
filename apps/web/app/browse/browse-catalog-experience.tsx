@@ -165,9 +165,9 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
   }
 
   return (
-    <>
+    <div className="browse-catalog-experience">
       {activeItem ? (
-        <div className="browse-banner browse-banner--interactive">
+        <div className="browse-banner browse-banner--interactive browse-banner--sticky">
           <div
             className="browse-banner__media"
             style={{ backgroundImage: `url('${activeItem.posterUrl || "/home/hero-banner.jpg"}')` }}
@@ -210,6 +210,6 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
           onSelect={(item) => setSelectedSlug(item.slug)}
         />
       ))}
-    </>
+    </div>
   );
 }
