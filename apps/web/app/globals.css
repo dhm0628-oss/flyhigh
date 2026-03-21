@@ -1737,16 +1737,6 @@ a {
   overflow: visible;
 }
 
-.browse-snap-section {
-  scroll-margin-top: 5.75rem;
-}
-
-.page--ott-catalog .browse-banner--sticky {
-  position: sticky;
-  top: 1rem;
-  z-index: 5;
-}
-
 .ott-rail {
   margin-bottom: 1.25rem;
   width: 100%;
@@ -1987,10 +1977,6 @@ a {
     max-height: 260px;
   }
 
-  .page--ott-catalog .browse-banner--sticky {
-    top: 0.5rem;
-  }
-
   .ott-rail__actions {
     gap: 0.35rem;
   }
@@ -2015,16 +2001,6 @@ a {
     width: 2rem;
     height: 3.25rem;
     font-size: 1.1rem;
-  }
-}
-
-@media (max-width: 900px) {
-  .page--ott-catalog .browse-banner--sticky {
-    position: static;
-  }
-
-  .browse-snap-section {
-    scroll-margin-top: 1rem;
   }
 }
 

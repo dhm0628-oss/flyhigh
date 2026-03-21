@@ -139,8 +139,6 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
 
   const [selectedSlug, setSelectedSlug] = useState(initialItem?.slug ?? allItems[0]?.slug ?? "");
   const heroVideoRef = useRef<HTMLVideoElement | null>(null);
-  const sectionRefs = useRef<Array<HTMLElement | null>>([]);
-  const wheelLockRef = useRef(false);
 
   const activeItem =
     allItems.find((item) => item.slug === selectedSlug) ??
@@ -166,58 +164,10 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
     }
   }
 
-  function scrollToSection(index: number) {
-    const target = sectionRefs.current[index];
-    if (!target) return;
-    target.scrollIntoView({
-      behavior: "smooth",
-      block: "start"
-    });
-  }
-
-  function handleExperienceWheel(event: React.WheelEvent<HTMLDivElement>) {
-    if (typeof window === "undefined" || window.innerWidth <= 900) return;
-    if (Math.abs(event.deltaY) < 18 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-    if ((event.target as HTMLElement | null)?.closest(".ott-rail__track")) return;
-    if (wheelLockRef.current) {
-      event.preventDefault();
-      return;
-    }
-
-    const sections = sectionRefs.current.filter(Boolean) as HTMLElement[];
-    if (!sections.length) return;
-
-    const stickyOffset = 96;
-    const currentIndex = sections.reduce((bestIndex, section, index) => {
-      const distance = Math.abs(section.getBoundingClientRect().top - stickyOffset);
-      const bestDistance = Math.abs(sections[bestIndex].getBoundingClientRect().top - stickyOffset);
-      return distance < bestDistance ? index : bestIndex;
-    }, 0);
-
-    const nextIndex =
-      event.deltaY > 0
-        ? Math.min(sections.length - 1, currentIndex + 1)
-        : Math.max(0, currentIndex - 1);
-
-    if (nextIndex === currentIndex) return;
-
-    event.preventDefault();
-    wheelLockRef.current = true;
-    scrollToSection(nextIndex);
-    window.setTimeout(() => {
-      wheelLockRef.current = false;
-    }, 550);
-  }
-
   return (
-    <div className="browse-catalog-experience" onWheel={handleExperienceWheel}>
+    <div className="browse-catalog-experience">
       {activeItem ? (
-        <div
-          className="browse-banner browse-banner--interactive browse-banner--sticky browse-snap-section"
-          ref={(node) => {
-            sectionRefs.current[0] = node;
-          }}
-        >
+        <div className="browse-banner browse-banner--interactive">
           <div
             className="browse-banner__media"
             style={{ backgroundImage: `url('${activeItem.posterUrl || "/home/hero-banner.jpg"}')` }}
@@ -252,13 +202,7 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
       ) : null}
 
       {rails.map((rail, railIndex) => (
-        <div
-          className="browse-snap-section"
-          key={rail.title}
-          ref={(node) => {
-            sectionRefs.current[railIndex + 1] = node;
-          }}
-        >
+        <div key={`${railIndex}-${rail.title}`}>
           <OttRail
             title={rail.title}
             items={rail.items}
