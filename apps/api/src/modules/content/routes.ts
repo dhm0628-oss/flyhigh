@@ -154,6 +154,11 @@ export async function registerContentRoutes(app: FastifyInstance) {
     });
 
     const resolveCollectionItems = async (collection: (typeof collections)[number]) => {
+      const manualItems = collection.items
+        .map((item) => item.content)
+        .filter((content) => content.publishStatus === PublishStatus.PUBLISHED)
+        .map(mapContentCard);
+
       if (collection.sourceTag?.trim()) {
         const taggedItems = await prisma.contentItem.findMany({
           where: {
@@ -163,13 +168,13 @@ export async function registerContentRoutes(app: FastifyInstance) {
           orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
           take: Math.max(1, Math.min(collection.sourceLimit || 24, 48))
         });
-        return taggedItems.map(mapContentCard);
+        if (taggedItems.length > 0) {
+          return taggedItems.map(mapContentCard);
+        }
+        return manualItems;
       }
 
-      return collection.items
-        .map((item) => item.content)
-        .filter((content) => content.publishStatus === PublishStatus.PUBLISHED)
-        .map(mapContentCard);
+      return manualItems;
     };
 
     const heroCollection = collections.find((collection) => collection.key.toLowerCase() === "hero");
@@ -1431,19 +1436,27 @@ export async function registerContentRoutes(app: FastifyInstance) {
       return badRequest(reply, "key and title are required");
     }
 
-    const collection = await prisma.collection.create({
-      data: {
-        key: body.key.trim(),
-        title: body.title.trim(),
-        description: body.description?.trim(),
-        sourceTag: typeof body.sourceTag === "string" ? body.sourceTag.trim() || null : null,
-        sourceLimit:
-          typeof body.sourceLimit === "number" ? Math.max(1, Math.min(48, Math.round(body.sourceLimit))) : 24,
-        sortOrder: Math.max(0, Math.round(body.sortOrder ?? 0)),
-        isActive: body.isActive ?? true,
-        isPublic: body.isPublic ?? true
+    let collection;
+    try {
+      collection = await prisma.collection.create({
+        data: {
+          key: body.key.trim(),
+          title: body.title.trim(),
+          description: body.description?.trim(),
+          sourceTag: typeof body.sourceTag === "string" ? body.sourceTag.trim() || null : null,
+          sourceLimit:
+            typeof body.sourceLimit === "number" ? Math.max(1, Math.min(48, Math.round(body.sourceLimit))) : 24,
+          sortOrder: Math.max(0, Math.round(body.sortOrder ?? 0)),
+          isActive: body.isActive ?? true,
+          isPublic: body.isPublic ?? true
+        }
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        return badRequest(reply, "A category with that key already exists");
       }
-    });
+      throw error;
+    }
 
     return reply.status(201).send({
       id: collection.id,
@@ -1474,47 +1487,54 @@ export async function registerContentRoutes(app: FastifyInstance) {
       return notFound(reply, "Collection not found");
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.collection.update({
-        where: { id },
-        data: {
-          title: typeof body.title === "string" ? body.title.trim() : undefined,
-          description:
-            body.description === null
-              ? null
-              : typeof body.description === "string"
-                ? body.description.trim()
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.collection.update({
+          where: { id },
+          data: {
+            title: typeof body.title === "string" ? body.title.trim() : undefined,
+            description:
+              body.description === null
+                ? null
+                : typeof body.description === "string"
+                  ? body.description.trim()
+                  : undefined,
+            sourceTag:
+              body.sourceTag === null
+                ? null
+                : typeof body.sourceTag === "string"
+                  ? body.sourceTag.trim() || null
+                  : undefined,
+            sourceLimit:
+              typeof body.sourceLimit === "number"
+                ? Math.max(1, Math.min(48, Math.round(body.sourceLimit)))
                 : undefined,
-          sourceTag:
-            body.sourceTag === null
-              ? null
-              : typeof body.sourceTag === "string"
-                ? body.sourceTag.trim() || null
-                : undefined,
-          sourceLimit:
-            typeof body.sourceLimit === "number"
-              ? Math.max(1, Math.min(48, Math.round(body.sourceLimit)))
-              : undefined,
-          sortOrder:
-            typeof body.sortOrder === "number" ? Math.max(0, Math.round(body.sortOrder)) : undefined,
-          isActive: typeof body.isActive === "boolean" ? body.isActive : undefined,
-          isPublic: typeof body.isPublic === "boolean" ? body.isPublic : undefined
+            sortOrder:
+              typeof body.sortOrder === "number" ? Math.max(0, Math.round(body.sortOrder)) : undefined,
+            isActive: typeof body.isActive === "boolean" ? body.isActive : undefined,
+            isPublic: typeof body.isPublic === "boolean" ? body.isPublic : undefined
+          }
+        });
+
+        if (Array.isArray(body.items)) {
+          await tx.collectionItem.deleteMany({ where: { collectionId: id } });
+          if (body.items.length > 0) {
+            await tx.collectionItem.createMany({
+              data: body.items.map((item, index) => ({
+                collectionId: id,
+                contentId: item.contentId,
+                sortOrder: Math.max(0, Math.round(item.sortOrder ?? index + 1))
+              }))
+            });
+          }
         }
       });
-
-      if (Array.isArray(body.items)) {
-        await tx.collectionItem.deleteMany({ where: { collectionId: id } });
-        if (body.items.length > 0) {
-          await tx.collectionItem.createMany({
-            data: body.items.map((item, index) => ({
-              collectionId: id,
-              contentId: item.contentId,
-              sortOrder: Math.max(0, Math.round(item.sortOrder ?? index + 1))
-            }))
-          });
-        }
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        return badRequest(reply, "This category update conflicts with an existing record");
       }
-    });
+      throw error;
+    }
 
     return { ok: true };
   });
