@@ -1737,6 +1737,10 @@ a {
   overflow: visible;
 }
 
+.browse-snap-section {
+  scroll-margin-top: 5.75rem;
+}
+
 .page--ott-catalog .browse-banner--sticky {
   position: sticky;
   top: 1rem;
@@ -2017,6 +2021,10 @@ a {
 @media (max-width: 900px) {
   .page--ott-catalog .browse-banner--sticky {
     position: static;
+  }
+
+  .browse-snap-section {
+    scroll-margin-top: 1rem;
   }
 }
 
