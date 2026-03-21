@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import type { ContentCard } from "@flyhigh/contracts";
+import type { ContentCard, HomeFeedResponse } from "@flyhigh/contracts";
 import { SiteFooter } from "../site-footer";
 import { SiteHeader } from "../site-header";
 import { BrowseSessionNote } from "./browse-session-note";
@@ -106,6 +106,17 @@ async function getTags(): Promise<TagsResponse> {
   }
 }
 
+async function getBrowseRows(): Promise<HomeFeedResponse> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+  try {
+    const response = await fetch(`${apiUrl}/v1/content/home`, { cache: "no-store" });
+    if (!response.ok) throw new Error("Failed to load browse rows");
+    return response.json();
+  } catch {
+    return { featured: null, featuredItems: [], rows: [] };
+  }
+}
+
 async function getAuthors(): Promise<AuthorsResponse> {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
   try {
@@ -129,7 +140,7 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
   const limit = 24;
   const allVideosLimit = 500;
 
-  const [catalog, allVideosCatalog, tags, authors] = await Promise.all([
+  const [catalog, allVideosCatalog, browseRows, tags, authors] = await Promise.all([
     getCatalog({ q, type, access, tag, author, sort, page, limit }),
     getCatalog({
       q: "",
@@ -141,6 +152,7 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
       page: 1,
       limit: allVideosLimit
     }),
+    getBrowseRows(),
     getTags(),
     getAuthors()
   ]);
@@ -152,16 +164,9 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
   const validAuthorValues = new Set(authors.authors.map((a) => a.author));
   const selectedAuthor = author === "all" || validAuthorValues.has(author) ? author : "all";
   const bannerItem = catalog.items[0] ?? null;
-  const films = catalog.items.filter((item) => item.type === "film");
-  const episodes = catalog.items.filter((item) => item.type === "episode");
-  const series = catalog.items.filter((item) => item.type === "series");
-  const freeNow = catalog.items.filter((item) => !item.isPremium);
   const rails: Array<{ title: string; items: ContentCard[] }> = [
     { title: "All Videos", items: allVideosCatalog.items },
-    { title: "Trending Now", items: catalog.items.slice(0, 12) },
-    { title: "Films", items: films.slice(0, 12) },
-    { title: "Series & Episodes", items: [...series, ...episodes].slice(0, 12) },
-    { title: "Watch Free", items: freeNow.slice(0, 12) }
+    ...browseRows.rows
   ].filter((row) => row.items.length > 0);
 
   return (

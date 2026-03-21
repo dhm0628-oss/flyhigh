@@ -1823,6 +1823,12 @@ a {
   scroll-snap-type: x mandatory;
   scroll-padding-left: 3.25rem;
   scroll-padding-right: 3.25rem;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.ott-rail__track::-webkit-scrollbar {
+  display: none;
 }
 
 .ott-rail__side-button {
