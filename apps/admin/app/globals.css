@@ -125,6 +125,18 @@ button, input, select, textarea { font: inherit; }
   border-radius: 10px;
   padding: 0.65rem 0.75rem;
 }
+.password-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.password-field input {
+  flex: 1 1 auto;
+}
+.password-field__toggle {
+  flex: 0 0 auto;
+  min-width: 72px;
+}
 .form-grid textarea { resize: vertical; }
 .span-2 { grid-column: span 2; }
 .checkbox { display: flex !important; align-items: center; gap: 0.55rem !important; }

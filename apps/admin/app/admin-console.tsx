@@ -620,6 +620,7 @@ export function AdminConsole() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [tab, setTab] = useState<"analytics" | "content" | "categories" | "marketing" | "subscribers">("analytics");
 
   const [content, setContent] = useState<ContentItem[]>([]);
@@ -2247,7 +2248,23 @@ export function AdminConsole() {
           <p>Use the seeded admin account to start managing content and rows.</p>
           <form className="form-grid" onSubmit={onLogin}>
             <label>Email<input type="email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} /></label>
-            <label>Password<input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} /></label>
+            <label>Password
+              <div className="password-field">
+                <input
+                  type={showLoginPassword ? "text" : "password"}
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-inline password-field__toggle"
+                  aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowLoginPassword((current) => !current)}
+                >
+                  {showLoginPassword ? "Hide" : "Show"}
+                </button>
+              </div>
+            </label>
             <button className="btn btn-primary" disabled={busy === "login"}>{busy === "login" ? "Signing in..." : "Sign in"}</button>
           </form>
           {error ? <p className="status status-error">{error}</p> : null}
