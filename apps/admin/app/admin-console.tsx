@@ -296,6 +296,18 @@ type BatchLocalUploadRow = {
   error?: string;
 };
 
+type CategoryCsvRow = {
+  key: string;
+  title: string;
+  description: string;
+  sourceTag: string;
+  sourceLimit: number;
+  sortOrder: number;
+  isPublic: boolean;
+  isActive: boolean;
+  videoSlugs: string[];
+};
+
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
 
 function slugify(value: string): string {
@@ -521,6 +533,68 @@ function parseBulkCsvRows(text: string): {
   return { rows, preview };
 }
 
+function parseBooleanCell(value: string, fallback: boolean): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (["true", "1", "yes", "y"].includes(normalized)) return true;
+  if (["false", "0", "no", "n"].includes(normalized)) return false;
+  return fallback;
+}
+
+function parseCategoryCsvRows(text: string): CategoryCsvRow[] {
+  const parsed = parseCsv(text);
+  if (parsed.length < 2) {
+    throw new Error("CSV must include a header row and at least one data row");
+  }
+
+  const header = parsed[0].map((h) => h.trim().toLowerCase());
+  const idx = (name: string) => header.indexOf(name);
+  const keyIdx = idx("key");
+  const titleIdx = idx("title");
+  const videoSlugsIdx = idx("video_slugs");
+
+  if (keyIdx < 0 || titleIdx < 0) {
+    throw new Error("CSV must include key and title columns");
+  }
+
+  const rows: CategoryCsvRow[] = [];
+  for (let i = 1; i < parsed.length; i += 1) {
+    const row = parsed[i];
+    const get = (name: string) => {
+      const position = idx(name);
+      return position >= 0 ? (row[position] ?? "").trim() : "";
+    };
+
+    const key = (row[keyIdx] ?? "").trim();
+    const title = (row[titleIdx] ?? "").trim();
+    if (!key || !title) continue;
+
+    const rawSlugs = videoSlugsIdx >= 0 ? (row[videoSlugsIdx] ?? "").trim() : "";
+    const videoSlugs = rawSlugs
+      .split("|")
+      .map((slug) => slug.trim())
+      .filter(Boolean);
+
+    rows.push({
+      key,
+      title,
+      description: get("description"),
+      sourceTag: get("source_tag"),
+      sourceLimit: Math.max(1, Math.min(48, Number.parseInt(get("source_limit") || "24", 10) || 24)),
+      sortOrder: Math.max(0, Number.parseInt(get("sort_order") || "0", 10) || 0),
+      isPublic: parseBooleanCell(get("is_public"), true),
+      isActive: parseBooleanCell(get("is_active"), true),
+      videoSlugs
+    });
+  }
+
+  if (!rows.length) {
+    throw new Error("No valid category rows found in CSV");
+  }
+
+  return rows;
+}
+
 type TrendRow = AnalyticsResponse["trends"][number];
 
 function TrendLineChart({ rows }: { rows: TrendRow[] }) {
@@ -710,6 +784,7 @@ export function AdminConsole() {
   const [collectionMetaDrafts, setCollectionMetaDrafts] = useState<
     Record<string, { title: string; description: string; sourceTag: string; sourceLimit: number; sortOrder: number; isPublic: boolean; isActive: boolean }>
   >({});
+  const [collapsedCategoryIds, setCollapsedCategoryIds] = useState<Record<string, boolean>>({});
 
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
@@ -731,6 +806,8 @@ export function AdminConsole() {
   });
 
   const [newCollection, setNewCollection] = useState({ key: "", title: "", sourceTag: "", sourceLimit: 24, sortOrder: 0, isPublic: true });
+  const [categoryCsvText, setCategoryCsvText] = useState("");
+  const [categoryCsvFileName, setCategoryCsvFileName] = useState("");
   const [uploadContentId, setUploadContentId] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [singleUploadProgress, setSingleUploadProgress] = useState(0);
@@ -929,6 +1006,11 @@ export function AdminConsole() {
             isActive: r.isActive ?? true
           }
         ])
+      )
+    );
+    setCollapsedCategoryIds((current) =>
+      Object.fromEntries(
+        rows.collections.map((r, index) => [r.id, current[r.id] ?? index > 0])
       )
     );
 
@@ -1670,6 +1752,120 @@ export function AdminConsole() {
     }
   }
 
+  function exportCategoriesCsv() {
+    const rows = [...collections]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((row) => {
+        const meta = collectionMetaDrafts[row.id] ?? {
+          title: row.title,
+          description: row.description ?? "",
+          sourceTag: row.sourceTag ?? "",
+          sourceLimit: row.sourceLimit ?? 24,
+          sortOrder: row.sortOrder,
+          isPublic: row.isPublic,
+          isActive: row.isActive ?? true
+        };
+        const videoSlugs = (collectionDrafts[row.id] ?? row.items.map((item) => item.slug)).join("|");
+        return {
+          key: row.key,
+          title: meta.title,
+          description: meta.description,
+          source_tag: meta.sourceTag,
+          source_limit: meta.sourceLimit,
+          sort_order: meta.sortOrder,
+          is_public: meta.isPublic,
+          is_active: meta.isActive,
+          video_slugs: videoSlugs
+        };
+      });
+
+    exportCsv("flyhigh-categories.csv", rows);
+    setNotice(`Exported ${rows.length} categories`);
+    setError(null);
+  }
+
+  async function onCategoryCsvFileSelected(file: File | null) {
+    if (!file) return;
+    try {
+      const text = await file.text();
+      parseCategoryCsvRows(text);
+      setCategoryCsvText(text);
+      setCategoryCsvFileName(file.name);
+      setNotice(`Loaded category CSV: ${file.name}`);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to read category CSV");
+    }
+  }
+
+  async function onImportCategoriesCsv() {
+    let rows: CategoryCsvRow[];
+    try {
+      rows = parseCategoryCsvRows(categoryCsvText);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid category CSV");
+      return;
+    }
+
+    const slugToId = new Map(content.map((item) => [item.slug, item.id]));
+    for (const row of rows) {
+      const missing = row.videoSlugs.filter((slug) => !slugToId.has(slug));
+      if (missing.length) {
+        setError(`Unknown slugs in ${row.key}: ${missing.join(", ")}`);
+        return;
+      }
+    }
+
+    setBusy("import-categories-csv");
+    setError(null);
+    setNotice(null);
+
+    try {
+      for (const row of rows) {
+        const existing = collections.find((collection) => collection.key === row.key);
+        const payload = {
+          title: row.title,
+          description: row.description || null,
+          sourceTag: row.sourceTag || null,
+          sourceLimit: row.sourceLimit,
+          sortOrder: row.sortOrder,
+          isPublic: row.isPublic,
+          isActive: row.isActive
+        };
+
+        let collectionId = existing?.id ?? "";
+        if (!existing) {
+          const created = await api<{ id: string; key: string }>("/v1/admin/collections", {
+            method: "POST",
+            body: JSON.stringify({
+              key: row.key,
+              ...payload
+            })
+          });
+          collectionId = created.id;
+        }
+
+        await api(`/v1/admin/collections/${collectionId}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...payload,
+            items: row.videoSlugs.map((slug, index) => ({
+              contentId: slugToId.get(slug),
+              sortOrder: index + 1
+            }))
+          })
+        });
+      }
+
+      await loadAdminData();
+      setNotice(`Imported ${rows.length} categories from CSV`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Category CSV import failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function onUploadVideo(e: FormEvent) {
     e.preventDefault();
     if (!uploadContentId || !uploadFile) {
@@ -2172,6 +2368,19 @@ export function AdminConsole() {
     setDropCategoryId(null);
     setDragCategoryId(null);
     await persistCategoryOrder(next, "Category order updated (drag and drop)");
+  }
+
+  function toggleCategoryCollapsed(collectionId: string) {
+    setCollapsedCategoryIds((current) => ({
+      ...current,
+      [collectionId]: !current[collectionId]
+    }));
+  }
+
+  function setAllCategoriesCollapsed(collapsed: boolean) {
+    setCollapsedCategoryIds(
+      Object.fromEntries(collections.map((row) => [row.id, collapsed]))
+    );
   }
 
   function updateCollectionMetaDraft(
@@ -3122,6 +3331,47 @@ export function AdminConsole() {
                 <div className="span-2"><button className="btn btn-primary" disabled={busy === "create-collection"}>{busy === "create-collection" ? "Creating..." : "Create Category"}</button></div>
               </form>
             </div>
+            <div className="card">
+              <div className="row__header">
+                <h2 className="section-title">Category CSV</h2>
+                <div className="row-actions">
+                  <button type="button" className="btn btn-secondary" onClick={exportCategoriesCsv}>Export Categories CSV</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setAllCategoriesCollapsed(false)}>Expand All</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setAllCategoriesCollapsed(true)}>Collapse All</button>
+                </div>
+              </div>
+              <div className="form-grid two-col" style={{ marginTop: "0.75rem" }}>
+                <label className="span-2">Import category CSV
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={(e) => void onCategoryCsvFileSelected(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+                <label className="span-2">CSV preview / paste area
+                  <textarea
+                    rows={6}
+                    value={categoryCsvText}
+                    onChange={(e) => setCategoryCsvText(e.target.value)}
+                    placeholder="key,title,description,source_tag,source_limit,sort_order,is_public,is_active,video_slugs"
+                  />
+                </label>
+                <div className="label span-2">
+                  Format: one row per category. Use `video_slugs` separated by `|`, for example `space-cadets|sewer-cats|free-agent`.
+                  {categoryCsvFileName ? ` Loaded file: ${categoryCsvFileName}.` : ""}
+                </div>
+                <div className="span-2 row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => void onImportCategoriesCsv()}
+                    disabled={busy === "import-categories-csv"}
+                  >
+                    {busy === "import-categories-csv" ? "Importing..." : "Import Categories CSV"}
+                  </button>
+                </div>
+              </div>
+            </div>
             <div className="stack">
               {[...collections].sort((a, b) => a.sortOrder - b.sortOrder).map((row) => (
                 <div
@@ -3164,78 +3414,101 @@ export function AdminConsole() {
                     };
                     return (
                       <>
-                        <div className="collection-head"><div><h3>{meta.title || row.title}</h3><div className="label">{row.key} | sort {meta.sortOrder}</div></div></div>
-                        <div className="label" style={{ marginTop: "0.4rem" }}>Drag this card to reorder categories.</div>
-                        <div className="row-actions" style={{ marginTop: "0.6rem" }}>
-                          <button className="btn-inline" onClick={() => void moveCategory(row.id, "up")} disabled={busy === "reorder-categories"}>Move Up</button>
-                          <button className="btn-inline" onClick={() => void moveCategory(row.id, "down")} disabled={busy === "reorder-categories"}>Move Down</button>
+                        <div className="collection-head">
+                          <div>
+                            <h3>{meta.title || row.title}</h3>
+                            <div className="label">{row.key} | sort {meta.sortOrder}</div>
+                          </div>
+                          <div className="row-actions">
+                            <button type="button" className="btn-inline" onClick={() => toggleCategoryCollapsed(row.id)}>
+                              {collapsedCategoryIds[row.id] ? "Expand" : "Collapse"}
+                            </button>
+                          </div>
                         </div>
-                        <div className="form-grid two-col" style={{ marginTop: "0.75rem" }}>
-                          <label>Row Title
-                            <input value={meta.title} onChange={(e) => updateCollectionMetaDraft(row.id, { title: e.target.value })} />
-                          </label>
-                          <label>Source Tag
-                            <input value={meta.sourceTag} onChange={(e) => updateCollectionMetaDraft(row.id, { sourceTag: e.target.value })} placeholder="space-mob" />
-                          </label>
-                          <label>Auto Row Limit
-                            <input type="number" min={1} max={48} value={meta.sourceLimit} onChange={(e) => updateCollectionMetaDraft(row.id, { sourceLimit: Number(e.target.value) })} />
-                          </label>
-                          <label>Sort Order
-                            <input type="number" value={meta.sortOrder} onChange={(e) => updateCollectionMetaDraft(row.id, { sortOrder: Number(e.target.value) })} />
-                          </label>
-                          <label className="span-2">Description
-                            <input value={meta.description} onChange={(e) => updateCollectionMetaDraft(row.id, { description: e.target.value })} />
-                          </label>
-                          <label className="checkbox"><input type="checkbox" checked={meta.isPublic} onChange={(e) => updateCollectionMetaDraft(row.id, { isPublic: e.target.checked })} />Public category</label>
-                          <label className="checkbox"><input type="checkbox" checked={meta.isActive} onChange={(e) => updateCollectionMetaDraft(row.id, { isActive: e.target.checked })} />Active category</label>
+                        <div className="label" style={{ marginTop: "0.4rem" }}>
+                          {row.sourceTag?.trim()
+                            ? `Auto tag: ${row.sourceTag} | fallback videos: ${(collectionDrafts[row.id] ?? []).length}`
+                            : `Manual videos: ${(collectionDrafts[row.id] ?? []).length}`}
                         </div>
+                        {!collapsedCategoryIds[row.id] ? (
+                          <>
+                            <div className="label" style={{ marginTop: "0.4rem" }}>Drag this card to reorder categories.</div>
+                            <div className="row-actions" style={{ marginTop: "0.6rem" }}>
+                              <button className="btn-inline" onClick={() => void moveCategory(row.id, "up")} disabled={busy === "reorder-categories"}>Move Up</button>
+                              <button className="btn-inline" onClick={() => void moveCategory(row.id, "down")} disabled={busy === "reorder-categories"}>Move Down</button>
+                            </div>
+                            <div className="form-grid two-col" style={{ marginTop: "0.75rem" }}>
+                              <label>Row Title
+                                <input value={meta.title} onChange={(e) => updateCollectionMetaDraft(row.id, { title: e.target.value })} />
+                              </label>
+                              <label>Source Tag
+                                <input value={meta.sourceTag} onChange={(e) => updateCollectionMetaDraft(row.id, { sourceTag: e.target.value })} placeholder="space-mob" />
+                              </label>
+                              <label>Auto Row Limit
+                                <input type="number" min={1} max={48} value={meta.sourceLimit} onChange={(e) => updateCollectionMetaDraft(row.id, { sourceLimit: Number(e.target.value) })} />
+                              </label>
+                              <label>Sort Order
+                                <input type="number" value={meta.sortOrder} onChange={(e) => updateCollectionMetaDraft(row.id, { sortOrder: Number(e.target.value) })} />
+                              </label>
+                              <label className="span-2">Description
+                                <input value={meta.description} onChange={(e) => updateCollectionMetaDraft(row.id, { description: e.target.value })} />
+                              </label>
+                              <label className="checkbox"><input type="checkbox" checked={meta.isPublic} onChange={(e) => updateCollectionMetaDraft(row.id, { isPublic: e.target.checked })} />Public category</label>
+                              <label className="checkbox"><input type="checkbox" checked={meta.isActive} onChange={(e) => updateCollectionMetaDraft(row.id, { isActive: e.target.checked })} />Active category</label>
+                            </div>
+                          </>
+                        ) : null}
                       </>
                     );
                   })()}
-                  <p className="label">
-                    {row.sourceTag?.trim()
-                      ? `Auto-populates from tag "${row.sourceTag}"${row.sourceLimit ? ` (up to ${row.sourceLimit})` : ""}. Manual slugs below are kept as fallback only.`
-                      : `Current videos: ${row.items.map((i) => i.slug).join(", ") || "none"}`}
-                  </p>
-                  <div className="collection-videos">
-                    <div className="label">Ordered videos in this row</div>
-                    {(collectionDrafts[row.id] ?? []).length ? (
-                      <div className="collection-video-list">
-                        {(collectionDrafts[row.id] ?? []).map((slug, index, list) => (
-                          <div className="collection-video-item" key={`${row.id}-${slug}`}>
-                            <div>
-                              <strong>{index + 1}. {slug}</strong>
-                            </div>
-                            <div className="row-actions">
-                              <button type="button" className="btn-inline" onClick={() => moveCollectionSlug(row.id, slug, "up")} disabled={index === 0}>Up</button>
-                              <button type="button" className="btn-inline" onClick={() => moveCollectionSlug(row.id, slug, "down")} disabled={index === list.length - 1}>Down</button>
-                              <button type="button" className="btn-inline danger" onClick={() => removeCollectionSlug(row.id, slug)}>Remove</button>
-                            </div>
+                  {!collapsedCategoryIds[row.id] ? (
+                    <>
+                      <p className="label">
+                        {row.sourceTag?.trim()
+                          ? `Auto-populates from tag "${row.sourceTag}"${row.sourceLimit ? ` (up to ${row.sourceLimit})` : ""}. Manual slugs below are kept as fallback only.`
+                          : `Current videos: ${row.items.map((i) => i.slug).join(", ") || "none"}`}
+                      </p>
+                      <div className="collection-videos">
+                        <div className="label">Ordered videos in this row</div>
+                        {(collectionDrafts[row.id] ?? []).length ? (
+                          <div className="collection-video-list">
+                            {(collectionDrafts[row.id] ?? []).map((slug, index, list) => (
+                              <div className="collection-video-item" key={`${row.id}-${slug}`}>
+                                <div>
+                                  <strong>{index + 1}. {slug}</strong>
+                                </div>
+                                <div className="row-actions">
+                                  <button type="button" className="btn-inline" onClick={() => moveCollectionSlug(row.id, slug, "up")} disabled={index === 0}>Up</button>
+                                  <button type="button" className="btn-inline" onClick={() => moveCollectionSlug(row.id, slug, "down")} disabled={index === list.length - 1}>Down</button>
+                                  <button type="button" className="btn-inline danger" onClick={() => removeCollectionSlug(row.id, slug)}>Remove</button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="label">No manual videos assigned yet.</p>
-                    )}
+                        ) : (
+                          <p className="label">No manual videos assigned yet.</p>
+                        )}
 
-                    <div className="collection-video-add">
-                      <label>Add video by slug
-                        <input
-                          list={`collection-slugs-${row.id}`}
-                          value={collectionSlugInputDrafts[row.id] ?? ""}
-                          onChange={(e) => setCollectionSlugInputDrafts({ ...collectionSlugInputDrafts, [row.id]: e.target.value })}
-                          placeholder="start typing a slug..."
-                        />
-                        <datalist id={`collection-slugs-${row.id}`}>
-                          {content.map((item) => (
-                            <option key={item.id} value={item.slug}>{item.title}</option>
-                          ))}
-                        </datalist>
-                      </label>
-                      <button type="button" className="btn-inline" onClick={() => addCollectionSlug(row.id)}>Add</button>
-                    </div>
-                  </div>
-                  <div className="row-actions"><button className="btn btn-secondary" onClick={() => void saveCollectionItems(row)} disabled={busy === `row-${row.id}`}>{busy === `row-${row.id}` ? "Saving..." : "Save Category Settings"}</button></div>
+                        <div className="collection-video-add">
+                          <label>Add video by slug
+                            <input
+                              list={`collection-slugs-${row.id}`}
+                              value={collectionSlugInputDrafts[row.id] ?? ""}
+                              onChange={(e) => setCollectionSlugInputDrafts({ ...collectionSlugInputDrafts, [row.id]: e.target.value })}
+                              placeholder="start typing a slug..."
+                            />
+                            <datalist id={`collection-slugs-${row.id}`}>
+                              {content.map((item) => (
+                                <option key={item.id} value={item.slug}>{item.title}</option>
+                              ))}
+                            </datalist>
+                          </label>
+                          <button type="button" className="btn-inline" onClick={() => addCollectionSlug(row.id)}>Add</button>
+                        </div>
+                      </div>
+                      <div className="row-actions"><button className="btn btn-secondary" onClick={() => void saveCollectionItems(row)} disabled={busy === `row-${row.id}`}>{busy === `row-${row.id}` ? "Saving..." : "Save Category Settings"}</button></div>
+                    </>
+                  ) : null}
                 </div>
               ))}
             </div>
