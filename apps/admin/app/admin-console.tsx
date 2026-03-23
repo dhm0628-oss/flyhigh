@@ -1784,6 +1784,35 @@ export function AdminConsole() {
     setError(null);
   }
 
+  function downloadCategoryCsvTemplate() {
+    exportCsv("flyhigh-categories-template.csv", [
+      {
+        key: "space-mob",
+        title: "Space Mob",
+        description: "Space Mob films and edits",
+        source_tag: "space-mob",
+        source_limit: 24,
+        sort_order: 1,
+        is_public: true,
+        is_active: true,
+        video_slugs: "space-cadets|yardsale-6-team-video-live-reveal"
+      },
+      {
+        key: "classics",
+        title: "Classics",
+        description: "Foundational wake films",
+        source_tag: "",
+        source_limit: 24,
+        sort_order: 2,
+        is_public: true,
+        is_active: true,
+        video_slugs: "exit-69|flying-high-fluid"
+      }
+    ]);
+    setNotice("Downloaded category CSV template");
+    setError(null);
+  }
+
   async function onCategoryCsvFileSelected(file: File | null) {
     if (!file) return;
     try {
@@ -3335,6 +3364,7 @@ export function AdminConsole() {
               <div className="row__header">
                 <h2 className="section-title">Category CSV</h2>
                 <div className="row-actions">
+                  <button type="button" className="btn btn-secondary" onClick={downloadCategoryCsvTemplate}>Download Template</button>
                   <button type="button" className="btn btn-secondary" onClick={exportCategoriesCsv}>Export Categories CSV</button>
                   <button type="button" className="btn btn-secondary" onClick={() => setAllCategoriesCollapsed(false)}>Expand All</button>
                   <button type="button" className="btn btn-secondary" onClick={() => setAllCategoriesCollapsed(true)}>Collapse All</button>
