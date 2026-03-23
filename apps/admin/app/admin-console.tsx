@@ -908,13 +908,28 @@ export function AdminConsole() {
   async function loadSessionAndData() {
     setLoading(true);
     setError(null);
+
+    let s: Session;
     try {
-      const s = await api<Session>("/v1/auth/session", { method: "GET" });
-      setSession(s);
-      if (s.authenticated) await loadAdminData();
+      s = await api<Session>("/v1/auth/session", { method: "GET" });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load session");
       setSession({ authenticated: false, viewer: null });
+      setLoading(false);
+      return;
+    }
+
+    setSession(s);
+
+    if (!s.authenticated) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await loadAdminData();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load admin data");
+      setNotice("Signed in, but some admin data did not load. Refresh and try again.");
     } finally {
       setLoading(false);
     }
