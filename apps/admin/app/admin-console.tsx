@@ -1853,20 +1853,25 @@ export function AdminConsole() {
     }
 
     const slugToId = new Map(content.map((item) => [item.slug, item.id]));
-    for (const row of rows) {
-      const missing = row.videoSlugs.filter((slug) => !slugToId.has(slug));
-      if (missing.length) {
-        setError(`Unknown slugs in ${row.key}: ${missing.join(", ")}`);
-        return;
-      }
-    }
+    const sanitizedRows = rows.map((row) => {
+      const keptSlugs = row.videoSlugs.filter((slug) => slugToId.has(slug));
+      const ignoredSlugs = row.videoSlugs.filter((slug) => !slugToId.has(slug));
+      return {
+        ...row,
+        videoSlugs: keptSlugs,
+        ignoredSlugs
+      };
+    });
 
     setBusy("import-categories-csv");
     setError(null);
     setNotice(null);
 
     try {
-      for (const row of rows) {
+      let ignoredCount = 0;
+      const ignoredByCategory: string[] = [];
+
+      for (const row of sanitizedRows) {
         const existing = collections.find((collection) => collection.key === row.key);
         const payload = {
           title: row.title,
@@ -1877,6 +1882,11 @@ export function AdminConsole() {
           isPublic: row.isPublic,
           isActive: row.isActive
         };
+
+        if (row.ignoredSlugs.length) {
+          ignoredCount += row.ignoredSlugs.length;
+          ignoredByCategory.push(`${row.key}: ${row.ignoredSlugs.join(", ")}`);
+        }
 
         let collectionId = existing?.id ?? "";
         if (!existing) {
@@ -1903,7 +1913,11 @@ export function AdminConsole() {
       }
 
       await loadAdminData();
-      setNotice(`Imported ${rows.length} categories from CSV`);
+      setNotice(
+        ignoredCount
+          ? `Imported ${rows.length} categories from CSV. Ignored ${ignoredCount} unknown slugs. ${ignoredByCategory.slice(0, 3).join(" | ")}${ignoredByCategory.length > 3 ? " | ..." : ""}`
+          : `Imported ${rows.length} categories from CSV`
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Category CSV import failed");
     } finally {
