@@ -952,6 +952,7 @@ export function AdminConsole() {
     ]);
     setContent(c.items);
     setCollections(rows.collections);
+    setCollapsedCategoryIds({});
     setPlans(p.plans);
     setNewGiftCardProduct((current) => ({
       ...current,
@@ -3381,8 +3382,6 @@ export function AdminConsole() {
                 <div className="row-actions">
                   <button type="button" className="btn btn-secondary" onClick={downloadCategoryCsvTemplate}>Download Template</button>
                   <button type="button" className="btn btn-secondary" onClick={exportCategoriesCsv}>Export Categories CSV</button>
-                  <button type="button" className="btn btn-secondary" onClick={() => setAllCategoriesCollapsed(false)}>Expand All</button>
-                  <button type="button" className="btn btn-secondary" onClick={() => setAllCategoriesCollapsed(true)}>Collapse All</button>
                 </div>
               </div>
               <div className="form-grid two-col" style={{ marginTop: "0.75rem" }}>
@@ -3462,18 +3461,17 @@ export function AdminConsole() {
                         <div className="collection-head">
                           <div>
                             <h3>{meta.title || row.title}</h3>
-                            <div className="label">{row.key} | sort {meta.sortOrder}</div>
+                            <div className="label">
+                              {row.key} | sort {meta.sortOrder} | {row.sourceTag?.trim()
+                                ? `auto tag: ${row.sourceTag}`
+                                : `manual videos: ${(collectionDrafts[row.id] ?? []).length}`}
+                            </div>
                           </div>
                           <div className="row-actions">
                             <button type="button" className="btn-inline" onClick={() => toggleCategoryCollapsed(row.id)}>
                               {collapsedCategoryIds[row.id] ? "Expand" : "Collapse"}
                             </button>
                           </div>
-                        </div>
-                        <div className="label" style={{ marginTop: "0.4rem" }}>
-                          {row.sourceTag?.trim()
-                            ? `Auto tag: ${row.sourceTag} | fallback videos: ${(collectionDrafts[row.id] ?? []).length}`
-                            : `Manual videos: ${(collectionDrafts[row.id] ?? []).length}`}
                         </div>
                         {!collapsedCategoryIds[row.id] ? (
                           <>
