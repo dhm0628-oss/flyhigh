@@ -34,7 +34,7 @@ function OttRail({
   function scrollByCard(direction: "left" | "right") {
     const track = trackRef.current;
     if (!track) return;
-    const amount = Math.max(320, Math.round(track.clientWidth * 0.9));
+    const amount = Math.max(280, Math.round(track.clientWidth * 0.72));
     track.scrollBy({
       left: direction === "left" ? -amount : amount,
       behavior: "smooth"

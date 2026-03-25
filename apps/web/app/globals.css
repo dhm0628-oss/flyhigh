@@ -918,6 +918,113 @@ a {
   display: block;
 }
 
+.page--watch-experience {
+  background: #0b0f17;
+  color: #eef3f7;
+}
+
+.page--watch-experience .watch-hero {
+  background:
+    radial-gradient(120% 120% at 20% 0%, rgba(59, 130, 246, 0.18) 0%, rgba(11, 15, 23, 0) 36%),
+    linear-gradient(180deg, #0f1724 0%, #0b0f17 100%);
+  border-bottom: 1px solid #1e293b;
+}
+
+.page--watch-experience .watch-back,
+.page--watch-experience .brand,
+.page--watch-experience h1,
+.page--watch-experience h2,
+.page--watch-experience h3,
+.page--watch-experience .watch-copy {
+  color: #eef3f7;
+}
+
+.page--watch-experience .card__meta,
+.page--watch-experience .label,
+.page--watch-experience .player-panel__head p {
+  color: #9fb0c1;
+}
+
+.page--watch-experience .player-panel,
+.page--watch-experience .watch-detail-card,
+.page--watch-experience .resume-panel,
+.page--watch-experience .watch-facts span,
+.page--watch-experience .watch-tag,
+.page--watch-experience .video-placeholder {
+  background: #121a26;
+  border-color: #253245;
+}
+
+.page--watch-experience .watch-facts span,
+.page--watch-experience .watch-tag {
+  color: #dce6ef;
+}
+
+.watch-meta--hero {
+  max-width: 760px;
+}
+
+.watch-detail-card {
+  max-width: 1100px;
+  margin: 1rem auto 0;
+  display: grid;
+  gap: 1rem;
+}
+
+.watch-detail-card__head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.watch-stage {
+  display: grid;
+  gap: 1rem;
+}
+
+.watch-stage__meta {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.video-wrap--featured {
+  position: relative;
+  max-width: 1100px;
+  margin: 0 auto;
+  border-radius: 18px;
+  border-color: #253245;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.video--featured {
+  aspect-ratio: 16 / 8.8;
+  object-fit: cover;
+  background:
+    linear-gradient(180deg, rgba(9, 12, 18, 0.18), rgba(9, 12, 18, 0.5)),
+    #05070d;
+}
+
+.video-overlay-play {
+  position: absolute;
+  inset: auto auto 22px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(8, 14, 24, 0.82);
+  color: #f6fbff;
+  border-radius: 999px;
+  padding: 0.85rem 1.3rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+.video-overlay-play:hover,
+.video-overlay-play:focus-visible {
+  background: rgba(17, 27, 42, 0.92);
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
 .video-placeholder,
 .web-status {
   border-radius: 12px;
