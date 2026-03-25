@@ -1812,15 +1812,18 @@ a {
 
 .page--ott-catalog {
   --browse-stage-width: 1080px;
+  overflow-x: clip;
 }
 
 .page--ott-catalog .watch-hero__inner,
 .page--ott-catalog .theme-container {
   max-width: var(--browse-stage-width);
+  min-width: 0;
 }
 
 .page--ott-catalog .watch-hero {
   border-bottom: 1px solid #1a1f2b;
+  overflow-x: clip;
 }
 
 .page--ott-catalog .browse-filters-card,
@@ -1854,6 +1857,7 @@ a {
   display: grid;
   gap: 0;
   overflow: visible;
+  min-width: 0;
 }
 
 .ott-rail {
@@ -1862,6 +1866,7 @@ a {
   max-width: var(--browse-stage-width);
   margin-left: auto;
   margin-right: auto;
+  min-width: 0;
 }
 
 .ott-rail__header {
@@ -1923,6 +1928,7 @@ a {
   position: relative;
   width: 100%;
   overflow: hidden;
+  min-width: 0;
 }
 
 .ott-rail__track {
@@ -2030,6 +2036,13 @@ a {
   gap: 0.28rem;
   padding: 0.75rem;
   color: #eef3fa;
+  min-width: 0;
+}
+
+.catalog-card__body--ott strong,
+.catalog-card__body--ott .card__meta {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .page--ott-catalog .browse-summary,
@@ -2093,13 +2106,29 @@ a {
 }
 
 @media (max-width: 640px) {
+  .page--ott-catalog,
+  .page--ott-catalog .watch-hero,
+  .page--ott-catalog .theme-section--compact,
+  .page--ott-catalog .theme-section--catalog {
+    overflow-x: clip;
+  }
+
+  .page--ott-catalog .watch-hero__inner,
+  .page--ott-catalog .theme-container {
+    padding-left: 14px;
+    padding-right: 14px;
+    max-width: 100%;
+  }
+
   .page--ott-catalog .theme-header__inner {
     padding-top: 12px;
     padding-bottom: 12px;
+    min-width: 0;
   }
 
   .page--ott-catalog .theme-header__brand-image {
     height: 72px;
+    max-width: min(68vw, 220px);
   }
 
   .watch-hero__inner {
@@ -2112,6 +2141,8 @@ a {
 
   .browse-hero {
     gap: 0.5rem;
+    width: 100%;
+    min-width: 0;
   }
 
   .browse-hero h1 {
@@ -2123,6 +2154,11 @@ a {
   .browse-hero .watch-copy {
     font-size: 0.9rem;
     line-height: 1.35;
+  }
+
+  .browse-hero > div {
+    min-width: 0;
+    width: 100%;
   }
 
   .browse-hero__meta {
@@ -2174,6 +2210,8 @@ a {
     aspect-ratio: 16 / 9.8;
     max-height: none;
     margin-bottom: 0.85rem;
+    width: 100%;
+    max-width: 100%;
   }
 
   .ott-rail__actions {
@@ -2191,10 +2229,10 @@ a {
 
   .ott-rail__track {
     gap: 0.6rem;
-    padding-left: 0.1rem;
-    padding-right: 0.1rem;
-    scroll-padding-left: 0.1rem;
-    scroll-padding-right: 0.1rem;
+    padding-left: 0;
+    padding-right: 0;
+    scroll-padding-left: 0;
+    scroll-padding-right: 0;
   }
 
   .ott-rail__side-button {
@@ -2204,6 +2242,7 @@ a {
   .catalog-card--ott {
     min-width: 176px;
     flex-basis: 176px;
+    max-width: 176px;
   }
 
   .catalog-card__body--ott {
