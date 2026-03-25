@@ -33,6 +33,11 @@ type BrowseParams = {
   page?: SearchParamValue;
 };
 
+type BrowseRail = {
+  title: string;
+  items: ContentCard[];
+};
+
 function first(value: SearchParamValue): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
@@ -63,6 +68,45 @@ function buildBrowseHref(next: { q?: string; type?: string; access?: string; tag
   if (next.page && next.page > 1) params.set("page", String(next.page));
   const qs = params.toString();
   return qs ? `/browse?${qs}` : "/browse";
+}
+
+function takeUniqueItems(items: ContentCard[], limit = 24): ContentCard[] {
+  const seen = new Set<string>();
+  const next: ContentCard[] = [];
+  for (const item of items) {
+    if (seen.has(item.id)) continue;
+    seen.add(item.id);
+    next.push(item);
+    if (next.length >= limit) break;
+  }
+  return next;
+}
+
+function buildFallbackRails(items: ContentCard[]): BrowseRail[] {
+  return [
+    {
+      title: "Recently Added",
+      items: takeUniqueItems(
+        [...items].sort((a, b) => (b.releaseYear ?? 0) - (a.releaseYear ?? 0))
+      )
+    },
+    {
+      title: "Subscriber Only",
+      items: takeUniqueItems(items.filter((item) => item.isPremium))
+    },
+    {
+      title: "Watch Free",
+      items: takeUniqueItems(items.filter((item) => !item.isPremium))
+    },
+    {
+      title: "Films",
+      items: takeUniqueItems(items.filter((item) => item.type === "film"))
+    },
+    {
+      title: "Series & Episodes",
+      items: takeUniqueItems(items.filter((item) => item.type === "series" || item.type === "episode"))
+    }
+  ].filter((row) => row.items.length > 0);
 }
 
 async function getCatalog(filters: {
@@ -164,10 +208,11 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
   const validAuthorValues = new Set(authors.authors.map((a) => a.author));
   const selectedAuthor = author === "all" || validAuthorValues.has(author) ? author : "all";
   const bannerItem = catalog.items[0] ?? null;
-  const rails: Array<{ title: string; items: ContentCard[] }> = [
+  const customRows = browseRows.rows.filter((row) => row.items.length > 0);
+  const rails: BrowseRail[] = [
     { title: "All Videos", items: allVideosCatalog.items },
-    ...browseRows.rows
-  ].filter((row) => row.items.length > 0);
+    ...(customRows.length > 0 ? customRows : buildFallbackRails(allVideosCatalog.items))
+  ].filter((row, index, rows) => row.items.length > 0 && rows.findIndex((candidate) => candidate.title === row.title) === index);
 
   return (
     <main className="page page--marketing page--ott-catalog">

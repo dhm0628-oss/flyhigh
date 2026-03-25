@@ -1860,6 +1860,10 @@ a {
   min-width: 0;
 }
 
+.browse-mobile-feature {
+  display: none;
+}
+
 .ott-rail {
   margin-bottom: 1.25rem;
   width: 100%;
@@ -1942,6 +1946,8 @@ a {
   scroll-snap-type: x mandatory;
   scroll-padding-left: 3.25rem;
   scroll-padding-right: 3.25rem;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
@@ -2207,11 +2213,56 @@ a {
   }
 
   .page--ott-catalog .browse-banner--interactive {
-    aspect-ratio: 16 / 9.8;
-    max-height: none;
-    margin-bottom: 0.85rem;
+    display: none;
+  }
+
+  .browse-mobile-feature {
+    display: grid;
+    gap: 0.75rem;
     width: 100%;
-    max-width: 100%;
+    margin: 0 0 0.95rem;
+    padding: 0.75rem;
+    border-radius: 16px;
+    border: 1px solid #232a38;
+    background: #0d1119;
+  }
+
+  .browse-mobile-feature__media {
+    overflow: hidden;
+    border-radius: 12px;
+    border: 1px solid #232a38;
+    background: #05070d;
+  }
+
+  .browse-mobile-feature__video,
+  .browse-mobile-feature__poster {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    background-size: cover;
+    background-position: center;
+  }
+
+  .browse-mobile-feature__body {
+    display: grid;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .browse-mobile-feature__body strong {
+    color: #f6f8fc;
+    font-size: 1rem;
+    line-height: 1.2;
+  }
+
+  .browse-mobile-feature__body .card__meta {
+    font-size: 0.82rem;
+    line-height: 1.35;
+  }
+
+  .browse-mobile-feature__body .btn {
+    width: 100%;
   }
 
   .ott-rail__actions {

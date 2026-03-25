@@ -7,6 +7,13 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
+    "import:uscreen": "tsx scripts/import-uscreen-csv.ts",
+    "generate:uscreen-sql": "tsx scripts/generate-uscreen-sql.ts",
+    "generate:uscreen-metadata-sql": "tsx scripts/generate-uscreen-metadata-update-sql.ts",
+    "generate:uscreen-tag-sql": "tsx scripts/generate-uscreen-tag-normalization-sql.ts",
+    "generate:media-map-template": "tsx scripts/generate-media-map-template.ts",
+    "generate:media-update-sql": "tsx scripts/generate-media-update-sql.ts",
+    "mux:import:dropbox": "tsx scripts/mux-import-from-dropbox.ts",
     "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"

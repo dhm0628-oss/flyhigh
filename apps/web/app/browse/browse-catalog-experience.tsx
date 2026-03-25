@@ -237,36 +237,68 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
   return (
     <div className="browse-catalog-experience">
       {activeItem ? (
-        <div className="browse-banner browse-banner--interactive">
-          <div
-            className="browse-banner__media"
-            style={{ backgroundImage: `url('${activeItem.posterUrl || "/home/hero-banner.jpg"}')` }}
-          />
-          {activeItem.previewUrl ? (
-            <video
-              key={activeItem.id}
-              ref={heroVideoRef}
-              className="browse-banner__video"
-              autoPlay
-              muted
-              playsInline
-              preload="metadata"
-              poster={activeItem.posterUrl || undefined}
-              onTimeUpdate={handleHeroTimeUpdate}
+        <>
+          <div className="browse-banner browse-banner--interactive">
+            <div
+              className="browse-banner__media"
+              style={{ backgroundImage: `url('${activeItem.posterUrl || "/home/hero-banner.jpg"}')` }}
             />
-          ) : null}
-          <div className="browse-banner__overlay" />
-          <div className="browse-banner__content">
-            <span className="browse-banner__eyebrow">Selected title</span>
-            <strong>{activeItem.title}</strong>
-            <p className="card__meta">{activeItem.synopsis}</p>
-            <div className="hero-banner__actions">
+            {activeItem.previewUrl ? (
+              <video
+                key={activeItem.id}
+                ref={heroVideoRef}
+                className="browse-banner__video"
+                autoPlay
+                muted
+                playsInline
+                preload="metadata"
+                poster={activeItem.posterUrl || undefined}
+                onTimeUpdate={handleHeroTimeUpdate}
+              />
+            ) : null}
+            <div className="browse-banner__overlay" />
+            <div className="browse-banner__content">
+              <span className="browse-banner__eyebrow">Selected title</span>
+              <strong>{activeItem.title}</strong>
+              <p className="card__meta">{activeItem.synopsis}</p>
+              <div className="hero-banner__actions">
+                <Link className="btn btn--header-primary" href={`/watch/${activeItem.slug}`}>
+                  Watch Now
+                </Link>
+              </div>
+            </div>
+          </div>
+          <div className="browse-mobile-feature">
+            <div className="browse-mobile-feature__media">
+              {activeItem.previewUrl ? (
+                <video
+                  key={`${activeItem.id}-mobile`}
+                  className="browse-mobile-feature__video"
+                  autoPlay
+                  muted
+                  playsInline
+                  preload="metadata"
+                  poster={activeItem.posterUrl || undefined}
+                >
+                  <source src={activeItem.previewUrl} />
+                </video>
+              ) : (
+                <div
+                  className="browse-mobile-feature__poster"
+                  style={{ backgroundImage: `url('${activeItem.posterUrl || "/home/hero-banner.jpg"}')` }}
+                />
+              )}
+            </div>
+            <div className="browse-mobile-feature__body">
+              <span className="browse-banner__eyebrow">Selected title</span>
+              <strong>{activeItem.title}</strong>
+              <p className="card__meta">{activeItem.synopsis}</p>
               <Link className="btn btn--header-primary" href={`/watch/${activeItem.slug}`}>
                 Watch Now
               </Link>
             </div>
           </div>
-        </div>
+        </>
       ) : null}
 
       {rails.map((rail, railIndex) => (
