@@ -156,6 +156,7 @@ export async function registerContentRoutes(app: FastifyInstance) {
     const resolveCollectionItems = async (collection: (typeof collections)[number]) => {
       const manualItems = collection.items
         .map((item) => item.content)
+        .filter((content): content is NonNullable<typeof content> => Boolean(content))
         .filter((content) => content.publishStatus === PublishStatus.PUBLISHED)
         .map(mapContentCard);
 
