@@ -37,6 +37,7 @@ export function PlaybackPanel({
   contentId,
   title,
   isPremium,
+  playbackAvailable,
   durationSeconds,
   posterUrl,
   synopsis,
@@ -48,6 +49,7 @@ export function PlaybackPanel({
   contentId: string;
   title: string;
   isPremium: boolean;
+  playbackAvailable: boolean;
   durationSeconds: number;
   posterUrl: string;
   synopsis: string;
@@ -112,11 +114,12 @@ export function PlaybackPanel({
   useEffect(() => {
     if (!session) return;
     if (autoPlaybackRequestedRef.current) return;
+    if (!playbackAvailable) return;
     if (isPremium && !session.authenticated) return;
 
     autoPlaybackRequestedRef.current = true;
     void requestPlayback(true);
-  }, [session, isPremium, contentId]);
+  }, [session, isPremium, contentId, playbackAvailable]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -151,8 +154,18 @@ export function PlaybackPanel({
   }, [playback?.allowed, playback?.playbackUrl]);
 
   async function requestPlayback(background = false) {
+    if (!playbackAvailable) {
+      setPlayback({ contentId, allowed: false, reason: "unavailable" });
+      if (!background) {
+        setError("Playback is not ready for this title yet.");
+      }
+      return false;
+    }
+
     setBusy(background ? "preflight" : "play");
-    setError(null);
+    if (!background) {
+      setError(null);
+    }
     if (!background) setNotice(null);
     initialSeekAppliedRef.current = false;
     try {
@@ -168,17 +181,25 @@ export function PlaybackPanel({
           if (!background) {
             setNotice("This title requires an active subscription.");
           }
-          return;
+          return false;
         }
-        throw new Error(payload?.error ?? `Playback request failed (${res.status})`);
+        const message = payload?.error ?? `Playback request failed (${res.status})`;
+        if (!background) {
+          throw new Error(message);
+        }
+        return false;
       }
       setPlayback(payload as PlaybackResponse);
       if (!background) {
         setNotice("Playback ready.");
       }
       setMediaIssue(null);
+      return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not prepare playback. Please try again.");
+      if (!background) {
+        setError(err instanceof Error ? err.message : "Could not prepare playback. Please try again.");
+      }
+      return false;
     } finally {
       setBusy(null);
     }
@@ -321,7 +342,8 @@ export function PlaybackPanel({
     setMediaIssue(null);
 
     if (!playback?.allowed || !playback.playbackUrl) {
-      await requestPlayback(false);
+      const prepared = await requestPlayback(false);
+      if (!prepared) return;
     }
 
     const video = videoRef.current;

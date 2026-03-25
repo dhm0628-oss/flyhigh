@@ -923,10 +923,22 @@ a {
   color: #eef3f7;
 }
 
+.page--watch-experience .content,
+.page--watch-experience .theme-footer,
+.page--watch-experience .footer-wrapper {
+  background: #0b0f17;
+}
+
 .page--watch-experience .watch-hero {
   background:
     radial-gradient(120% 120% at 20% 0%, rgba(59, 130, 246, 0.18) 0%, rgba(11, 15, 23, 0) 36%),
     linear-gradient(180deg, #0f1724 0%, #0b0f17 100%);
+  border-bottom: 1px solid #1e293b;
+}
+
+.page--watch-experience .theme-header--compact {
+  color: #eef3f7;
+  background-color: transparent;
   border-bottom: 1px solid #1e293b;
 }
 

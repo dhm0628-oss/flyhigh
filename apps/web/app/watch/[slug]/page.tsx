@@ -79,6 +79,7 @@ export default async function WatchPage({ params }: { params: Promise<{ slug: st
           contentId={item.id}
           title={item.title}
           isPremium={item.isPremium}
+          playbackAvailable={item.playbackAvailable}
           durationSeconds={item.durationSeconds}
           posterUrl={item.posterUrl}
           synopsis={item.synopsis}

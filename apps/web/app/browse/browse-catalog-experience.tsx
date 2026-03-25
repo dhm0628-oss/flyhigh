@@ -31,14 +31,38 @@ function OttRail({
   const trackRef = useRef<HTMLDivElement | null>(null);
   const itemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
 
+  function animateScrollTo(targetLeft: number) {
+    const track = trackRef.current;
+    if (!track) return;
+
+    const startLeft = track.scrollLeft;
+    const distance = targetLeft - startLeft;
+    const durationMs = 560;
+    const startedAt = performance.now();
+
+    const step = (timestamp: number) => {
+      const elapsed = timestamp - startedAt;
+      const progress = Math.min(elapsed / durationMs, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      track.scrollLeft = startLeft + distance * eased;
+      if (progress < 1) {
+        window.requestAnimationFrame(step);
+      }
+    };
+
+    window.requestAnimationFrame(step);
+  }
+
   function scrollByCard(direction: "left" | "right") {
     const track = trackRef.current;
     if (!track) return;
-    const amount = Math.max(280, Math.round(track.clientWidth * 0.72));
-    track.scrollBy({
-      left: direction === "left" ? -amount : amount,
-      behavior: "smooth"
-    });
+    const amount = Math.max(220, Math.round(track.clientWidth * 0.52));
+    const maxLeft = Math.max(0, track.scrollWidth - track.clientWidth);
+    const targetLeft = Math.min(
+      maxLeft,
+      Math.max(0, track.scrollLeft + (direction === "left" ? -amount : amount))
+    );
+    animateScrollTo(targetLeft);
   }
 
   useEffect(() => {
