@@ -1405,12 +1405,14 @@ export async function registerContentRoutes(app: FastifyInstance) {
         isActive: collection.isActive,
         isPublic: collection.isPublic,
         sortOrder: collection.sortOrder,
-        items: collection.items.map((item) => ({
-          contentId: item.contentId,
-          sortOrder: item.sortOrder,
-          title: item.content.title,
-          slug: item.content.slug
-        }))
+        items: collection.items
+          .filter((item) => item.content)
+          .map((item) => ({
+            contentId: item.contentId,
+            sortOrder: item.sortOrder,
+            title: item.content.title,
+            slug: item.content.slug
+          }))
       }))
     };
   });
