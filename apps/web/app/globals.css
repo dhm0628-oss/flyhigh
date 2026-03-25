@@ -1940,7 +1940,8 @@ a {
   gap: 0.9rem;
   overflow-x: auto;
   padding: 0 3.25rem 0.4rem;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   scrollbar-width: thin;
   scroll-behavior: smooth;
   scroll-snap-type: x mandatory;
@@ -1948,6 +1949,7 @@ a {
   scroll-padding-right: 3.25rem;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x;
+  overscroll-behavior-x: contain;
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
@@ -2218,11 +2220,11 @@ a {
 
   .browse-mobile-feature {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.6rem;
     width: 100%;
-    margin: 0 0 0.95rem;
-    padding: 0.75rem;
-    border-radius: 16px;
+    margin: 0 0 0.8rem;
+    padding: 0.65rem;
+    border-radius: 14px;
     border: 1px solid #232a38;
     background: #0d1119;
   }
@@ -2238,7 +2240,7 @@ a {
   .browse-mobile-feature__poster {
     display: block;
     width: 100%;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 16 / 10.8;
     object-fit: cover;
     background-size: cover;
     background-position: center;
@@ -2246,23 +2248,30 @@ a {
 
   .browse-mobile-feature__body {
     display: grid;
-    gap: 0.45rem;
+    gap: 0.3rem;
     min-width: 0;
   }
 
   .browse-mobile-feature__body strong {
     color: #f6f8fc;
-    font-size: 1rem;
+    font-size: 0.92rem;
     line-height: 1.2;
   }
 
   .browse-mobile-feature__body .card__meta {
-    font-size: 0.82rem;
-    line-height: 1.35;
+    font-size: 0.78rem;
+    line-height: 1.3;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .browse-mobile-feature__body .btn {
     width: 100%;
+    min-height: 38px;
+    padding: 9px 14px;
+    font-size: 0.9rem;
   }
 
   .ott-rail__actions {
@@ -2291,9 +2300,9 @@ a {
   }
 
   .catalog-card--ott {
-    min-width: 176px;
-    flex-basis: 176px;
-    max-width: 176px;
+    min-width: 164px;
+    flex-basis: 164px;
+    max-width: 164px;
   }
 
   .catalog-card__body--ott {
