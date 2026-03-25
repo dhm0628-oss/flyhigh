@@ -1,5 +1,6 @@
 "use client";
 
+import Hls from "hls.js";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ContentCard } from "@flyhigh/contracts";
@@ -17,16 +18,18 @@ type Props = {
 function OttRail({
   title,
   items,
+  activeRailTitle,
   activeSlug,
-  onSelect
+  onPreview
 }: {
   title: string;
   items: ContentCard[];
+  activeRailTitle?: string;
   activeSlug?: string;
-  onSelect: (item: ContentCard) => void;
+  onPreview: (item: ContentCard, railTitle: string) => void;
 }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
-  const itemRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const itemRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
 
   function scrollByCard(direction: "left" | "right") {
     const track = trackRef.current;
@@ -39,7 +42,7 @@ function OttRail({
   }
 
   useEffect(() => {
-    if (!activeSlug) return;
+    if (!activeSlug || activeRailTitle !== title) return;
     const track = trackRef.current;
     const activeCard = itemRefs.current[activeSlug];
     if (!track || !activeCard) return;
@@ -55,7 +58,6 @@ function OttRail({
       <div className="ott-rail__header">
         <h2 className="ott-rail__title">{title}</h2>
         <div className="ott-rail__actions">
-          <span className="ott-rail__hint">Use Next to browse more titles</span>
           <button
             type="button"
             className="ott-rail__button ott-rail__button--text"
@@ -85,19 +87,20 @@ function OttRail({
         </button>
         <div className="ott-rail__track" ref={trackRef}>
           {items.map((item) => (
-            <button
-              type="button"
+            <Link
+              href={`/watch/${item.slug}`}
               className={`catalog-card catalog-card--ott ott-card-button ${activeSlug === item.slug ? "is-active" : ""}`}
               key={`${title}-${item.id}`}
               ref={(node) => {
                 itemRefs.current[item.slug] = node;
               }}
-              onClick={() => onSelect(item)}
+              onMouseEnter={() => onPreview(item, title)}
+              onFocus={() => onPreview(item, title)}
             >
               <article>
                 <div
                   className="catalog-card__poster catalog-card__poster--ott"
-                  style={item.posterUrl ? { backgroundImage: `url(${item.posterUrl})` } : undefined}
+                  style={{ backgroundImage: `url(${item.posterUrl || "/home/hero-banner.jpg"})` }}
                 />
                 <div className="catalog-card__body catalog-card__body--ott">
                   <strong>{item.title}</strong>
@@ -107,7 +110,7 @@ function OttRail({
                   <div className="card__meta">{item.isPremium ? "Subscriber only" : "Free"}</div>
                 </div>
               </article>
-            </button>
+            </Link>
           ))}
         </div>
         <button
@@ -137,23 +140,66 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
     return items;
   }, [rails]);
 
-  const [selectedSlug, setSelectedSlug] = useState(initialItem?.slug ?? allItems[0]?.slug ?? "");
+  const [selectedState, setSelectedState] = useState<{
+    slug: string;
+    railTitle: string;
+  }>(() => {
+    const fallbackSlug = initialItem?.slug ?? allItems[0]?.slug ?? "";
+    const fallbackRailTitle =
+      rails.find((rail) => rail.items.some((item) => item.slug === fallbackSlug))?.title ??
+      rails[0]?.title ??
+      "";
+    return { slug: fallbackSlug, railTitle: fallbackRailTitle };
+  });
   const heroVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const activeItem =
-    allItems.find((item) => item.slug === selectedSlug) ??
+    allItems.find((item) => item.slug === selectedState.slug) ??
     initialItem ??
     allItems[0] ??
     null;
 
   useEffect(() => {
     const video = heroVideoRef.current;
-    if (!video || !activeItem?.previewUrl) return;
+    if (!video) return;
 
-    video.currentTime = 0;
-    void video.play().catch(() => {
-      // Ignore autoplay rejections; the poster remains visible.
-    });
+    let hls: Hls | null = null;
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+
+    if (!activeItem?.previewUrl) {
+      return;
+    }
+
+    const startPlayback = () => {
+      video.currentTime = 0;
+      void video.play().catch(() => {
+        // Ignore autoplay rejections; the poster remains visible.
+      });
+    };
+
+    if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = activeItem.previewUrl;
+      startPlayback();
+    } else if (Hls.isSupported()) {
+      hls = new Hls({
+        enableWorker: true
+      });
+      hls.loadSource(activeItem.previewUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, startPlayback);
+    } else {
+      video.src = activeItem.previewUrl;
+      startPlayback();
+    }
+
+    return () => {
+      if (hls) hls.destroy();
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+    };
   }, [activeItem?.id, activeItem?.previewUrl]);
 
   function handleHeroTimeUpdate() {
@@ -183,9 +229,7 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
               preload="metadata"
               poster={activeItem.posterUrl || undefined}
               onTimeUpdate={handleHeroTimeUpdate}
-            >
-              <source src={activeItem.previewUrl} type="application/x-mpegURL" />
-            </video>
+            />
           ) : null}
           <div className="browse-banner__overlay" />
           <div className="browse-banner__content">
@@ -206,8 +250,9 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
           <OttRail
             title={rail.title}
             items={rail.items}
+            activeRailTitle={selectedState.railTitle}
             activeSlug={activeItem?.slug}
-            onSelect={(item) => setSelectedSlug(item.slug)}
+            onPreview={(item, railTitle) => setSelectedState({ slug: item.slug, railTitle })}
           />
         </div>
       ))}
