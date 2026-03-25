@@ -2310,6 +2310,25 @@ export function AdminConsole() {
     }
   }
 
+  async function onDeleteCollection(id: string) {
+    const row = collections.find((entry) => entry.id === id);
+    const confirmed = window.confirm(`Delete category "${row?.title ?? id}"? This cannot be undone.`);
+    if (!confirmed) return;
+
+    setBusy(`delete-collection-${id}`);
+    setError(null);
+    setNotice(null);
+    try {
+      await api(`/v1/admin/collections/${id}`, { method: "DELETE" });
+      await loadAdminData();
+      setNotice("Category deleted");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete category failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function saveCollectionItems(row: Collection) {
     const meta = collectionMetaDrafts[row.id] ?? {
       title: row.title,
@@ -3484,6 +3503,14 @@ export function AdminConsole() {
                           <div className="row-actions">
                             <button type="button" className="btn-inline" onClick={() => toggleCategoryCollapsed(row.id)}>
                               {collapsedCategoryIds[row.id] ? "Expand" : "Collapse"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-inline danger"
+                              onClick={() => void onDeleteCollection(row.id)}
+                              disabled={busy === `delete-collection-${row.id}`}
+                            >
+                              {busy === `delete-collection-${row.id}` ? "Deleting..." : "Delete"}
                             </button>
                           </div>
                         </div>

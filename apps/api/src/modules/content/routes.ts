@@ -1564,6 +1564,26 @@ export async function registerContentRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  app.delete("/v1/admin/collections/:id", async (request, reply) => {
+    const auth = await requireAdmin(app, request, reply);
+    if (!auth) {
+      return;
+    }
+
+    const { id } = request.params as { id: string };
+    const existing = await prisma.collection.findUnique({ where: { id } });
+    if (!existing) {
+      return notFound(reply, "Collection not found");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.collectionItem.deleteMany({ where: { collectionId: id } });
+      await tx.collection.delete({ where: { id } });
+    });
+
+    return { ok: true };
+  });
+
   app.patch("/v1/admin/categories/reorder", async (request, reply) => {
     const auth = await requireAdmin(app, request, reply);
     if (!auth) {
