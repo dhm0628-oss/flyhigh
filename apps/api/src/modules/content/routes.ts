@@ -142,78 +142,100 @@ async function requireAdmin(_app: FastifyInstance, request: FastifyRequest, repl
 
 export async function registerContentRoutes(app: FastifyInstance) {
   app.get("/v1/content/home", async () => {
-    const collections = await prisma.collection.findMany({
-      where: { isActive: true, isPublic: true },
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      include: {
-        items: {
-          orderBy: [{ sortOrder: "asc" }],
-          include: { content: true }
+    try {
+      const collections = await prisma.collection.findMany({
+        where: { isActive: true, isPublic: true },
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+        include: {
+          items: {
+            orderBy: [{ sortOrder: "asc" }],
+            include: { content: true }
+          }
         }
-      }
-    });
+      });
 
-    const resolveCollectionItems = async (collection: (typeof collections)[number]) => {
-      const manualItems = collection.items
-        .map((item) => item.content)
-        .filter((content): content is NonNullable<typeof content> => Boolean(content))
-        .filter((content) => content.publishStatus === PublishStatus.PUBLISHED)
-        .map(mapContentCard);
+      const resolveCollectionItems = async (collection: (typeof collections)[number]) => {
+        try {
+          const manualItems = collection.items
+            .map((item) => item.content)
+            .filter((content): content is NonNullable<typeof content> => Boolean(content))
+            .filter((content) => content.publishStatus === PublishStatus.PUBLISHED)
+            .map(mapContentCard);
 
-      if (collection.sourceTag?.trim()) {
-        const taggedItems = await prisma.contentItem.findMany({
-          where: {
-            publishStatus: PublishStatus.PUBLISHED,
-            tags: { has: collection.sourceTag.trim() }
-          },
-          orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-          take: Math.max(1, Math.min(collection.sourceLimit || 24, 48))
-        });
-        if (taggedItems.length > 0) {
-          return taggedItems.map(mapContentCard);
+          if (collection.sourceTag?.trim()) {
+            const taggedItems = await prisma.contentItem.findMany({
+              where: {
+                publishStatus: PublishStatus.PUBLISHED,
+                tags: { has: collection.sourceTag.trim() }
+              },
+              orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+              take: Math.max(1, Math.min(collection.sourceLimit || 24, 48))
+            });
+            if (taggedItems.length > 0) {
+              return taggedItems.map(mapContentCard);
+            }
+            return manualItems;
+          }
+
+          return manualItems;
+        } catch (error) {
+          app.log.error(
+            {
+              err: error,
+              collectionId: collection.id,
+              collectionKey: collection.key
+            },
+            "content.home.collection_failed"
+          );
+          return [];
         }
-        return manualItems;
-      }
+      };
 
-      return manualItems;
-    };
+      const heroCollection = collections.find((collection) => collection.key.toLowerCase() === "hero");
+      const featuredItemsFromHero = heroCollection ? await resolveCollectionItems(heroCollection) : [];
 
-    const heroCollection = collections.find((collection) => collection.key.toLowerCase() === "hero");
-    const featuredItemsFromHero = heroCollection ? await resolveCollectionItems(heroCollection) : [];
+      const rowCollections = collections.filter((collection) => collection.id !== heroCollection?.id);
+      const rowItems = await Promise.all(
+        rowCollections.map(async (collection) => ({
+          id: collection.id,
+          title: collection.title,
+          items: await resolveCollectionItems(collection)
+        }))
+      );
+      const rows = rowItems.filter((row) => row.items.length > 0);
 
-    const rowCollections = collections.filter((collection) => collection.id !== heroCollection?.id);
-    const rowItems = await Promise.all(
-      rowCollections.map(async (collection) => ({
-        id: collection.id,
-        title: collection.title,
-        items: await resolveCollectionItems(collection)
-      }))
-    );
-    const rows = rowItems.filter((row) => row.items.length > 0);
+      const fallbackFeaturedItems = rows
+        .flatMap((row) => row.items)
+        .filter((item) => Array.isArray(item.tags) && item.tags.includes("featured"))
+        .slice(0, 6);
+      const featuredItems =
+        featuredItemsFromHero.length > 0
+          ? featuredItemsFromHero.slice(0, 10)
+          : fallbackFeaturedItems.length > 0
+            ? fallbackFeaturedItems
+            : rows.flatMap((row) => row.items).slice(0, 6);
 
-    const fallbackFeaturedItems = rows
-      .flatMap((row) => row.items)
-      .filter((item) => item.tags.includes("featured"))
-      .slice(0, 6);
-    const featuredItems =
-      featuredItemsFromHero.length > 0
-        ? featuredItemsFromHero.slice(0, 10)
-        : fallbackFeaturedItems.length > 0
-          ? fallbackFeaturedItems
-          : rows.flatMap((row) => row.items).slice(0, 6);
+      const featuredSource =
+        featuredItems[0] ??
+        rows[0]?.items[0] ??
+        null;
 
-    const featuredSource =
-      featuredItems[0] ??
-      rows[0]?.items[0] ??
-      null;
+      const response: HomeFeedResponse = {
+        featured: featuredSource,
+        featuredItems,
+        rows
+      };
 
-    const response: HomeFeedResponse = {
-      featured: featuredSource,
-      featuredItems,
-      rows
-    };
-
-    return response;
+      return response;
+    } catch (error) {
+      app.log.error({ err: error }, "content.home.failed");
+      const response: HomeFeedResponse = {
+        featured: null,
+        featuredItems: [],
+        rows: []
+      };
+      return response;
+    }
   });
 
   app.post("/v1/analytics/hero-events", async (request, reply) => {
