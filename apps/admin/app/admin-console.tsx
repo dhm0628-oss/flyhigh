@@ -936,7 +936,7 @@ export function AdminConsole() {
   }
 
   async function loadAdminData() {
-    const [c, rows, p, subs, couponRes, giftCardProductRes, giftCardRes, giftCardAnalyticsRes, pushDevicesRes, pushCampaignRes, readinessRes, webhookLogRes] = await Promise.all([
+    const results = await Promise.allSettled([
       api<{ items: ContentItem[] }>("/v1/admin/content", { method: "GET" }),
       api<{ collections: Collection[] }>("/v1/admin/collections", { method: "GET" }),
       api<{ plans: Plan[] }>("/v1/admin/plans", { method: "GET" }),
@@ -950,98 +950,189 @@ export function AdminConsole() {
       api<ReadinessReport>("/v1/admin/readiness", { method: "GET" }),
       api<{ logs: WebhookLog[] }>("/v1/admin/webhooks?limit=40", { method: "GET" })
     ]);
-    setContent(c.items);
-    setCollections(rows.collections);
-    setCollapsedCategoryIds({});
-    setPlans(p.plans);
-    setNewGiftCardProduct((current) => ({
-      ...current,
-      planCode:
-        current.planCode ||
-        p.plans.find((plan) => plan.isActive && plan.interval === "month")?.code ||
-        p.plans.find((plan) => plan.isActive)?.code ||
-        p.plans[0]?.code ||
-        ""
-    }));
-    setPlanDrafts(
-      Object.fromEntries(
-        p.plans.map((plan) => [
-          plan.id,
-          {
-            code: plan.code,
-            name: plan.name,
-            interval: plan.interval,
-            priceCents: plan.priceCents,
-            currency: plan.currency,
-            providerPriceId: plan.providerPriceId ?? "",
-            isActive: plan.isActive
-          }
-        ])
-      )
-    );
-    setSubscribers(subs.subscribers);
-    setCoupons(couponRes.coupons);
-    setGiftCardProducts(giftCardProductRes.products);
-    setGiftCards(giftCardRes.giftCards);
-    setGiftCardAnalytics(giftCardAnalyticsRes);
-    setReadiness(readinessRes);
-    setGiftCardProductDrafts(
-      Object.fromEntries(
-        giftCardProductRes.products.map((product) => [
-          product.id,
-          {
-            code: product.code,
-            name: product.name,
-            description: product.description ?? "",
-            amountCents: product.amountCents,
-            currency: product.currency,
-            durationMonths: product.durationMonths,
-            stripePriceId: product.stripePriceId ?? "",
-            planCode: product.plan.code,
-            isActive: product.isActive
-          }
-        ])
-      )
-    );
-    setPushDevices(pushDevicesRes.devices);
-    setPushCampaigns(pushCampaignRes.campaigns);
-    setWebhookLogs(webhookLogRes.logs);
-    setCollectionDrafts(Object.fromEntries(rows.collections.map((r) => [r.id, r.items.map((i) => i.slug)])));
-    setCollectionSlugInputDrafts(Object.fromEntries(rows.collections.map((r) => [r.id, ""])));
-    setCollectionMetaDrafts(
-      Object.fromEntries(
-        rows.collections.map((r) => [
-          r.id,
-          {
-            title: r.title ?? "",
-            description: r.description ?? "",
-            sourceTag: r.sourceTag ?? "",
-            sourceLimit: r.sourceLimit ?? 24,
-            sortOrder: r.sortOrder ?? 0,
-            isPublic: r.isPublic ?? true,
-            isActive: r.isActive ?? true
-          }
-        ])
-      )
-    );
-    setCollapsedCategoryIds((current) =>
-      Object.fromEntries(
-        rows.collections.map((r, index) => [r.id, current[r.id] ?? index > 0])
-      )
-    );
 
-    await loadAnalytics({ startDate: analyticsStartDate, endDate: analyticsEndDate, days: analyticsDays });
-    await loadDeviceSessions(deviceStatusFilter);
+    const [
+      contentRes,
+      collectionsRes,
+      plansRes,
+      subscribersRes,
+      couponsRes,
+      giftCardProductsRes,
+      giftCardsRes,
+      giftCardAnalyticsRes,
+      pushDevicesRes,
+      pushCampaignsRes,
+      readinessRes,
+      webhookLogsRes
+    ] = results;
+
+    const failures: string[] = [];
+    const nextContent = contentRes.status === "fulfilled" ? contentRes.value.items : [];
+    const nextCollections = collectionsRes.status === "fulfilled" ? collectionsRes.value.collections : [];
+
+    if (contentRes.status === "fulfilled") {
+      setContent(contentRes.value.items);
+    } else {
+      failures.push("content");
+    }
+
+    if (collectionsRes.status === "fulfilled") {
+      setCollections(collectionsRes.value.collections);
+      setCollectionDrafts(Object.fromEntries(collectionsRes.value.collections.map((r) => [r.id, r.items.map((i) => i.slug)])));
+      setCollectionSlugInputDrafts(Object.fromEntries(collectionsRes.value.collections.map((r) => [r.id, ""])));
+      setCollectionMetaDrafts(
+        Object.fromEntries(
+          collectionsRes.value.collections.map((r) => [
+            r.id,
+            {
+              title: r.title ?? "",
+              description: r.description ?? "",
+              sourceTag: r.sourceTag ?? "",
+              sourceLimit: r.sourceLimit ?? 24,
+              sortOrder: r.sortOrder ?? 0,
+              isPublic: r.isPublic ?? true,
+              isActive: r.isActive ?? true
+            }
+          ])
+        )
+      );
+      setCollapsedCategoryIds((current) =>
+        Object.fromEntries(
+          collectionsRes.value.collections.map((r, index) => [r.id, current[r.id] ?? index > 0])
+        )
+      );
+    } else {
+      failures.push("categories");
+    }
+
+    if (plansRes.status === "fulfilled") {
+      setPlans(plansRes.value.plans);
+      setNewGiftCardProduct((current) => ({
+        ...current,
+        planCode:
+          current.planCode ||
+          plansRes.value.plans.find((plan) => plan.isActive && plan.interval === "month")?.code ||
+          plansRes.value.plans.find((plan) => plan.isActive)?.code ||
+          plansRes.value.plans[0]?.code ||
+          ""
+      }));
+      setPlanDrafts(
+        Object.fromEntries(
+          plansRes.value.plans.map((plan) => [
+            plan.id,
+            {
+              code: plan.code,
+              name: plan.name,
+              interval: plan.interval,
+              priceCents: plan.priceCents,
+              currency: plan.currency,
+              providerPriceId: plan.providerPriceId ?? "",
+              isActive: plan.isActive
+            }
+          ])
+        )
+      );
+    } else {
+      failures.push("plans");
+    }
+
+    if (subscribersRes.status === "fulfilled") {
+      setSubscribers(subscribersRes.value.subscribers);
+    } else {
+      failures.push("subscribers");
+    }
+
+    if (couponsRes.status === "fulfilled") {
+      setCoupons(couponsRes.value.coupons);
+    } else {
+      failures.push("coupons");
+    }
+
+    if (giftCardProductsRes.status === "fulfilled") {
+      setGiftCardProducts(giftCardProductsRes.value.products);
+      setGiftCardProductDrafts(
+        Object.fromEntries(
+          giftCardProductsRes.value.products.map((product) => [
+            product.id,
+            {
+              code: product.code,
+              name: product.name,
+              description: product.description ?? "",
+              amountCents: product.amountCents,
+              currency: product.currency,
+              durationMonths: product.durationMonths,
+              stripePriceId: product.stripePriceId ?? "",
+              planCode: product.plan.code,
+              isActive: product.isActive
+            }
+          ])
+        )
+      );
+    } else {
+      failures.push("gift card products");
+    }
+
+    if (giftCardsRes.status === "fulfilled") {
+      setGiftCards(giftCardsRes.value.giftCards);
+    } else {
+      failures.push("gift cards");
+    }
+
+    if (giftCardAnalyticsRes.status === "fulfilled") {
+      setGiftCardAnalytics(giftCardAnalyticsRes.value);
+    } else {
+      failures.push("gift card analytics");
+    }
+
+    if (pushDevicesRes.status === "fulfilled") {
+      setPushDevices(pushDevicesRes.value.devices);
+    } else {
+      failures.push("push devices");
+    }
+
+    if (pushCampaignsRes.status === "fulfilled") {
+      setPushCampaigns(pushCampaignsRes.value.campaigns);
+    } else {
+      failures.push("push campaigns");
+    }
+
+    if (readinessRes.status === "fulfilled") {
+      setReadiness(readinessRes.value);
+    } else {
+      failures.push("readiness");
+    }
+
+    if (webhookLogsRes.status === "fulfilled") {
+      setWebhookLogs(webhookLogsRes.value.logs);
+    } else {
+      failures.push("webhook logs");
+    }
+
+    try {
+      await loadAnalytics({ startDate: analyticsStartDate, endDate: analyticsEndDate, days: analyticsDays });
+    } catch {
+      failures.push("analytics");
+    }
+
+    try {
+      await loadDeviceSessions(deviceStatusFilter);
+    } catch {
+      failures.push("device sessions");
+    }
 
     if (editContentId) {
-      const selected = c.items.find((item) => item.id === editContentId);
+      const selected = nextContent.find((item) => item.id === editContentId);
       if (selected) {
         hydrateEditForm(selected);
-        const selectedCategoryIds = rows.collections
+        const selectedCategoryIds = nextCollections
           .filter((row) => row.items.some((entry) => entry.contentId === selected.id))
           .map((row) => row.id);
         setEditCategoryIds(selectedCategoryIds);
       }
+    }
+
+    if (failures.length) {
+      setNotice(`Some admin sections did not load: ${failures.slice(0, 4).join(", ")}${failures.length > 4 ? ", ..." : ""}`);
     }
   }
 
