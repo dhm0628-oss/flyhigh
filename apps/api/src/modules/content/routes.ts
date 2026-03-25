@@ -160,17 +160,22 @@ export async function registerContentRoutes(app: FastifyInstance) {
             .map((item) => item.content)
             .filter((content): content is NonNullable<typeof content> => Boolean(content))
             .filter((content) => content.publishStatus === PublishStatus.PUBLISHED)
+            .filter((content) => Boolean(content.muxPlaybackId || content.playbackUrl))
             .map(mapContentCard);
 
           if (collection.sourceTag?.trim()) {
-            const taggedItems = await prisma.contentItem.findMany({
+            const sourceTag = collection.sourceTag.trim().toLowerCase();
+            const taggedCandidates = await prisma.contentItem.findMany({
               where: {
                 publishStatus: PublishStatus.PUBLISHED,
-                tags: { has: collection.sourceTag.trim() }
+                AND: [contentHasPlaybackWhere]
               },
               orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-              take: Math.max(1, Math.min(collection.sourceLimit || 24, 48))
+              take: 200
             });
+            const taggedItems = taggedCandidates
+              .filter((item) => item.tags.some((tag) => tag.trim().toLowerCase() === sourceTag))
+              .slice(0, Math.max(1, Math.min(collection.sourceLimit || 24, 48)));
             if (taggedItems.length > 0) {
               return taggedItems.map(mapContentCard);
             }

@@ -2097,6 +2097,10 @@ a {
     padding-bottom: 28px;
   }
 
+  .page--ott-catalog {
+    --browse-stage-width: 100%;
+  }
+
   .browse-hero {
     gap: 0.75rem;
   }
@@ -2111,7 +2115,21 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .browse-filters-card {
+    padding: 0.95rem;
+  }
+
   .browse-controls__actions--catalog .btn {
+    width: 100%;
+  }
+
+  .browse-summary,
+  .browse-pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .browse-pagination .btn {
     width: 100%;
   }
 
@@ -2136,21 +2154,19 @@ a {
 
   .ott-rail__track {
     gap: 0.7rem;
-    padding-left: 2.2rem;
-    padding-right: 2.2rem;
-    scroll-padding-left: 2.2rem;
-    scroll-padding-right: 2.2rem;
+    padding-left: 0.1rem;
+    padding-right: 0.1rem;
+    scroll-padding-left: 0.1rem;
+    scroll-padding-right: 0.1rem;
   }
 
   .ott-rail__side-button {
-    width: 1.8rem;
-    height: 3rem;
-    font-size: 1.1rem;
+    display: none;
   }
 
   .catalog-card--ott {
-    min-width: 232px;
-    flex-basis: 232px;
+    min-width: 210px;
+    flex-basis: 210px;
   }
 
   .catalog-card__body--ott {
