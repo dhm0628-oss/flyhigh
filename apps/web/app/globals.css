@@ -1864,6 +1864,10 @@ a {
   display: none;
 }
 
+.mobile-rail {
+  display: none;
+}
+
 .ott-rail {
   margin-bottom: 1.25rem;
   width: 100%;
@@ -2276,6 +2280,86 @@ a {
 
   .ott-rail {
     margin-bottom: 0.9rem;
+  }
+
+  .ott-rail {
+    display: none;
+  }
+
+  .mobile-rail {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 0.9rem;
+  }
+
+  .mobile-rail__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .mobile-rail__title {
+    margin: 0;
+    font-size: 1rem;
+    color: #f6f8fc;
+  }
+
+  .mobile-rail__scroller {
+    display: flex;
+    gap: 0.6rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0 0 0.2rem;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .mobile-rail__scroller::-webkit-scrollbar {
+    display: none;
+  }
+
+  .mobile-rail__card {
+    flex: 0 0 150px;
+    max-width: 150px;
+    min-width: 150px;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .mobile-rail__poster {
+    aspect-ratio: 16 / 9;
+    border-radius: 10px;
+    border: 1px solid #1f2735;
+    background-size: cover;
+    background-position: center;
+    background-color: #0c1118;
+  }
+
+  .mobile-rail__body {
+    display: grid;
+    gap: 0.2rem;
+    padding: 0.35rem 0.1rem 0;
+    min-width: 0;
+  }
+
+  .mobile-rail__body strong {
+    color: #f6f8fc;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-rail__body .card__meta {
+    font-size: 0.68rem;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .mobile-rail__card.is-active .mobile-rail__poster {
+    border-color: #7dd3fc;
+    box-shadow: 0 0 0 1px rgba(125, 211, 252, 0.35);
   }
 
   .ott-rail__header {

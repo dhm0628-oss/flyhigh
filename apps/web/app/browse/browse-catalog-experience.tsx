@@ -150,6 +150,48 @@ function OttRail({
   );
 }
 
+function MobileRail({
+  title,
+  items,
+  activeSlug,
+  onPreview
+}: {
+  title: string;
+  items: ContentCard[];
+  activeSlug?: string;
+  onPreview: (item: ContentCard, railTitle: string) => void;
+}) {
+  return (
+    <section className="mobile-rail">
+      <div className="mobile-rail__header">
+        <h2 className="mobile-rail__title">{title}</h2>
+      </div>
+      <div className="mobile-rail__scroller">
+        {items.map((item) => (
+          <Link
+            href={`/watch/${item.slug}`}
+            className={`mobile-rail__card ${activeSlug === item.slug ? "is-active" : ""}`}
+            key={`${title}-${item.id}`}
+            onTouchStart={() => onPreview(item, title)}
+            onFocus={() => onPreview(item, title)}
+          >
+            <div
+              className="mobile-rail__poster"
+              style={{ backgroundImage: `url(${item.posterUrl || "/home/hero-banner.jpg"})` }}
+            />
+            <div className="mobile-rail__body">
+              <strong>{item.title}</strong>
+              <div className="card__meta">
+                {item.type} | {Math.round(item.durationSeconds / 60)} min
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function BrowseCatalogExperience({ initialItem, rails }: Props) {
   const allItems = useMemo(() => {
     const seen = new Set<string>();
@@ -307,6 +349,12 @@ export function BrowseCatalogExperience({ initialItem, rails }: Props) {
             title={rail.title}
             items={rail.items}
             activeRailTitle={selectedState.railTitle}
+            activeSlug={activeItem?.slug}
+            onPreview={(item, railTitle) => setSelectedState({ slug: item.slug, railTitle })}
+          />
+          <MobileRail
+            title={rail.title}
+            items={rail.items}
             activeSlug={activeItem?.slug}
             onPreview={(item, railTitle) => setSelectedState({ slug: item.slug, railTitle })}
           />
