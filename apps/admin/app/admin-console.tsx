@@ -847,6 +847,8 @@ export function AdminConsole() {
     isPremium: true
   });
 
+  type AdminTab = "analytics" | "content" | "categories" | "marketing" | "subscribers";
+
   const publishedCount = useMemo(() => content.filter((c) => c.publishStatus === "published").length, [content]);
   const activeSubs = useMemo(() => subscribers.filter((s) => ["active", "trialing"].includes(s.latestSubscription?.status ?? "")).length, [subscribers]);
   const monthlyPlan = plans.find((p) => p.interval === "month");
@@ -935,36 +937,20 @@ export function AdminConsole() {
     }
   }
 
-  async function loadAdminData() {
-    const results = await Promise.allSettled([
+  async function loadAdminData(targetTab: AdminTab = tab) {
+    const baseResults = await Promise.allSettled([
       api<{ items: ContentItem[] }>("/v1/admin/content", { method: "GET" }),
       api<{ collections: Collection[] }>("/v1/admin/collections", { method: "GET" }),
       api<{ plans: Plan[] }>("/v1/admin/plans", { method: "GET" }),
-      api<{ subscribers: Subscriber[] }>("/v1/admin/subscribers", { method: "GET" }),
-      api<{ coupons: Coupon[] }>("/v1/admin/coupons", { method: "GET" }),
-      api<{ products: GiftCardProduct[] }>("/v1/admin/gift-card-products", { method: "GET" }),
-      api<{ giftCards: GiftCard[] }>("/v1/admin/gift-cards", { method: "GET" }),
-      api<GiftCardAnalytics>("/v1/admin/gift-cards/analytics", { method: "GET" }),
-      api<{ devices: PushDevice[] }>("/v1/admin/marketing/push/devices?limit=200", { method: "GET" }),
-      api<{ campaigns: PushCampaign[] }>("/v1/admin/marketing/push/campaigns", { method: "GET" }),
-      api<ReadinessReport>("/v1/admin/readiness", { method: "GET" }),
-      api<{ logs: WebhookLog[] }>("/v1/admin/webhooks?limit=40", { method: "GET" })
+      api<{ subscribers: Subscriber[] }>("/v1/admin/subscribers", { method: "GET" })
     ]);
 
     const [
       contentRes,
       collectionsRes,
       plansRes,
-      subscribersRes,
-      couponsRes,
-      giftCardProductsRes,
-      giftCardsRes,
-      giftCardAnalyticsRes,
-      pushDevicesRes,
-      pushCampaignsRes,
-      readinessRes,
-      webhookLogsRes
-    ] = results;
+      subscribersRes
+    ] = baseResults;
 
     const failures: string[] = [];
     const nextContent = contentRes.status === "fulfilled" ? contentRes.value.items : [];
@@ -1042,82 +1028,109 @@ export function AdminConsole() {
       failures.push("subscribers");
     }
 
-    if (couponsRes.status === "fulfilled") {
-      setCoupons(couponsRes.value.coupons);
-    } else {
-      failures.push("coupons");
+    if (targetTab === "analytics") {
+      const analyticsResults = await Promise.allSettled([
+        api<ReadinessReport>("/v1/admin/readiness", { method: "GET" }),
+        api<{ logs: WebhookLog[] }>("/v1/admin/webhooks?limit=40", { method: "GET" })
+      ]);
+      const [readinessRes, webhookLogsRes] = analyticsResults;
+
+      if (readinessRes.status === "fulfilled") {
+        setReadiness(readinessRes.value);
+      } else {
+        failures.push("readiness");
+      }
+
+      if (webhookLogsRes.status === "fulfilled") {
+        setWebhookLogs(webhookLogsRes.value.logs);
+      } else {
+        failures.push("webhook logs");
+      }
+
+      try {
+        await loadAnalytics({ startDate: analyticsStartDate, endDate: analyticsEndDate, days: analyticsDays });
+      } catch {
+        failures.push("analytics");
+      }
+
+      try {
+        await loadDeviceSessions(deviceStatusFilter);
+      } catch {
+        failures.push("device sessions");
+      }
     }
 
-    if (giftCardProductsRes.status === "fulfilled") {
-      setGiftCardProducts(giftCardProductsRes.value.products);
-      setGiftCardProductDrafts(
-        Object.fromEntries(
-          giftCardProductsRes.value.products.map((product) => [
-            product.id,
-            {
-              code: product.code,
-              name: product.name,
-              description: product.description ?? "",
-              amountCents: product.amountCents,
-              currency: product.currency,
-              durationMonths: product.durationMonths,
-              stripePriceId: product.stripePriceId ?? "",
-              planCode: product.plan.code,
-              isActive: product.isActive
-            }
-          ])
-        )
-      );
-    } else {
-      failures.push("gift card products");
-    }
+    if (targetTab === "marketing") {
+      const marketingResults = await Promise.allSettled([
+        api<{ coupons: Coupon[] }>("/v1/admin/coupons", { method: "GET" }),
+        api<{ products: GiftCardProduct[] }>("/v1/admin/gift-card-products", { method: "GET" }),
+        api<{ giftCards: GiftCard[] }>("/v1/admin/gift-cards", { method: "GET" }),
+        api<GiftCardAnalytics>("/v1/admin/gift-cards/analytics", { method: "GET" }),
+        api<{ devices: PushDevice[] }>("/v1/admin/marketing/push/devices?limit=200", { method: "GET" }),
+        api<{ campaigns: PushCampaign[] }>("/v1/admin/marketing/push/campaigns", { method: "GET" })
+      ]);
+      const [
+        couponsRes,
+        giftCardProductsRes,
+        giftCardsRes,
+        giftCardAnalyticsRes,
+        pushDevicesRes,
+        pushCampaignsRes
+      ] = marketingResults;
 
-    if (giftCardsRes.status === "fulfilled") {
-      setGiftCards(giftCardsRes.value.giftCards);
-    } else {
-      failures.push("gift cards");
-    }
+      if (couponsRes.status === "fulfilled") {
+        setCoupons(couponsRes.value.coupons);
+      } else {
+        failures.push("coupons");
+      }
 
-    if (giftCardAnalyticsRes.status === "fulfilled") {
-      setGiftCardAnalytics(giftCardAnalyticsRes.value);
-    } else {
-      failures.push("gift card analytics");
-    }
+      if (giftCardProductsRes.status === "fulfilled") {
+        setGiftCardProducts(giftCardProductsRes.value.products);
+        setGiftCardProductDrafts(
+          Object.fromEntries(
+            giftCardProductsRes.value.products.map((product) => [
+              product.id,
+              {
+                code: product.code,
+                name: product.name,
+                description: product.description ?? "",
+                amountCents: product.amountCents,
+                currency: product.currency,
+                durationMonths: product.durationMonths,
+                stripePriceId: product.stripePriceId ?? "",
+                planCode: product.plan.code,
+                isActive: product.isActive
+              }
+            ])
+          )
+        );
+      } else {
+        failures.push("gift card products");
+      }
 
-    if (pushDevicesRes.status === "fulfilled") {
-      setPushDevices(pushDevicesRes.value.devices);
-    } else {
-      failures.push("push devices");
-    }
+      if (giftCardsRes.status === "fulfilled") {
+        setGiftCards(giftCardsRes.value.giftCards);
+      } else {
+        failures.push("gift cards");
+      }
 
-    if (pushCampaignsRes.status === "fulfilled") {
-      setPushCampaigns(pushCampaignsRes.value.campaigns);
-    } else {
-      failures.push("push campaigns");
-    }
+      if (giftCardAnalyticsRes.status === "fulfilled") {
+        setGiftCardAnalytics(giftCardAnalyticsRes.value);
+      } else {
+        failures.push("gift card analytics");
+      }
 
-    if (readinessRes.status === "fulfilled") {
-      setReadiness(readinessRes.value);
-    } else {
-      failures.push("readiness");
-    }
+      if (pushDevicesRes.status === "fulfilled") {
+        setPushDevices(pushDevicesRes.value.devices);
+      } else {
+        failures.push("push devices");
+      }
 
-    if (webhookLogsRes.status === "fulfilled") {
-      setWebhookLogs(webhookLogsRes.value.logs);
-    } else {
-      failures.push("webhook logs");
-    }
-
-    try {
-      await loadAnalytics({ startDate: analyticsStartDate, endDate: analyticsEndDate, days: analyticsDays });
-    } catch {
-      failures.push("analytics");
-    }
-
-    try {
-      await loadDeviceSessions(deviceStatusFilter);
-    } catch {
-      failures.push("device sessions");
+      if (pushCampaignsRes.status === "fulfilled") {
+        setPushCampaigns(pushCampaignsRes.value.campaigns);
+      } else {
+        failures.push("push campaigns");
+      }
     }
 
     if (editContentId) {
@@ -1135,6 +1148,11 @@ export function AdminConsole() {
       setNotice(`Some admin sections did not load: ${failures.slice(0, 4).join(", ")}${failures.length > 4 ? ", ..." : ""}`);
     }
   }
+
+  useEffect(() => {
+    if (!session?.authenticated || loading) return;
+    void loadAdminData(tab);
+  }, [tab]);
 
   async function loadDeviceSessions(status: string) {
     const search = new URLSearchParams();
