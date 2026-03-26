@@ -2220,18 +2220,18 @@ a {
 
   .browse-mobile-feature {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.45rem;
     width: 100%;
-    margin: 0 0 0.8rem;
-    padding: 0.65rem;
-    border-radius: 14px;
+    margin: 0 0 0.65rem;
+    padding: 0.55rem;
+    border-radius: 12px;
     border: 1px solid #232a38;
     background: #0d1119;
   }
 
   .browse-mobile-feature__media {
     overflow: hidden;
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid #232a38;
     background: #05070d;
   }
@@ -2240,7 +2240,7 @@ a {
   .browse-mobile-feature__poster {
     display: block;
     width: 100%;
-    aspect-ratio: 16 / 10.8;
+    aspect-ratio: 16 / 12;
     object-fit: cover;
     background-size: cover;
     background-position: center;
@@ -2254,24 +2254,36 @@ a {
 
   .browse-mobile-feature__body strong {
     color: #f6f8fc;
-    font-size: 0.92rem;
+    font-size: 0.86rem;
     line-height: 1.2;
   }
 
   .browse-mobile-feature__body .card__meta {
-    font-size: 0.78rem;
-    line-height: 1.3;
+    font-size: 0.74rem;
+    line-height: 1.25;
     display: -webkit-box;
     overflow: hidden;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
   }
 
   .browse-mobile-feature__body .btn {
     width: 100%;
-    min-height: 38px;
-    padding: 9px 14px;
-    font-size: 0.9rem;
+    min-height: 34px;
+    padding: 8px 12px;
+    font-size: 0.84rem;
+  }
+
+  .ott-rail {
+    margin-bottom: 0.9rem;
+  }
+
+  .ott-rail__header {
+    margin-bottom: 0.45rem;
+  }
+
+  .ott-rail__title {
+    font-size: 1rem;
   }
 
   .ott-rail__actions {
@@ -2287,8 +2299,24 @@ a {
     min-width: 0;
   }
 
+  .ott-rail__viewport {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .ott-rail__viewport::-webkit-scrollbar {
+    display: none;
+  }
+
   .ott-rail__track {
     gap: 0.6rem;
+    width: max-content;
+    min-width: max-content;
+    overflow: visible;
     padding-left: 0;
     padding-right: 0;
     scroll-padding-left: 0;
@@ -2300,24 +2328,24 @@ a {
   }
 
   .catalog-card--ott {
-    min-width: 164px;
-    flex-basis: 164px;
-    max-width: 164px;
+    min-width: 150px;
+    flex-basis: 150px;
+    max-width: 150px;
   }
 
   .catalog-card__body--ott {
     gap: 0.2rem;
-    padding: 0.5rem;
+    padding: 0.45rem;
   }
 
   .catalog-card__body--ott strong {
-    font-size: 0.88rem;
+    font-size: 0.8rem;
     line-height: 1.2;
   }
 
   .catalog-card__body--ott .card__meta {
-    font-size: 0.74rem;
-    line-height: 1.25;
+    font-size: 0.68rem;
+    line-height: 1.2;
   }
 
   .browse-banner__content {
