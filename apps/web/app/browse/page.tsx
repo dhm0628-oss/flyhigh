@@ -182,7 +182,7 @@ export default async function BrowsePage({ searchParams }: { searchParams?: Prom
   const sort = normalizeSort(first(params.sort));
   const page = Math.max(1, Number.parseInt(first(params.page) || "1", 10) || 1);
   const limit = 24;
-  const allVideosLimit = 500;
+  const allVideosLimit = 180;
 
   const [catalog, allVideosCatalog, browseRows, tags, authors] = await Promise.all([
     getCatalog({ q, type, access, tag, author, sort, page, limit }),

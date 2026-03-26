@@ -154,6 +154,17 @@ export async function registerContentRoutes(app: FastifyInstance) {
         }
       });
 
+      const publishedPlayableItems = collections.some((collection) => Boolean(collection.sourceTag?.trim()))
+        ? await prisma.contentItem.findMany({
+            where: {
+              publishStatus: PublishStatus.PUBLISHED,
+              AND: [contentHasPlaybackWhere]
+            },
+            orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+            take: 600
+          })
+        : [];
+
       const resolveCollectionItems = async (collection: (typeof collections)[number]) => {
         try {
           const manualItems = collection.items
@@ -165,15 +176,7 @@ export async function registerContentRoutes(app: FastifyInstance) {
 
           if (collection.sourceTag?.trim()) {
             const sourceTag = collection.sourceTag.trim().toLowerCase();
-            const taggedCandidates = await prisma.contentItem.findMany({
-              where: {
-                publishStatus: PublishStatus.PUBLISHED,
-                AND: [contentHasPlaybackWhere]
-              },
-              orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-              take: 200
-            });
-            const taggedItems = taggedCandidates
+            const taggedItems = publishedPlayableItems
               .filter((item) => item.tags.some((tag) => tag.trim().toLowerCase() === sourceTag))
               .slice(0, Math.max(1, Math.min(collection.sourceLimit || 24, 48)));
             if (taggedItems.length > 0) {
