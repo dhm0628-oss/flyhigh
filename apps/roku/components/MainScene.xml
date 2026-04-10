@@ -1,49 +1,81 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <component name="MainScene" extends="Scene">
   <interface />
   <children>
     <Rectangle id="bg" width="1280" height="720" color="0x07131AFF" />
+    <Rectangle id="debugBanner" visible="false" translation="[40,20]" width="1200" height="72" color="0xFFD54AFF" />
+    <Label id="debugLabel" visible="false" translation="[60,32]" width="1160" height="28" color="0x101820FF" text="Flyhigh Roku Beta booting..." />
+    <Label id="debugItemsLabel" visible="false" translation="[60,58]" width="1160" height="20" color="0x101820FF" text="" />
 
-    <Label id="headerLabel" translation="[60,40]" width="1160" height="48" text="FlyHigh TV" />
-    <Label id="statusLabel" translation="[60,82]" width="1160" height="34" text="Loading home feed..." />
-    <Label id="hintLabel" translation="[60,112]" width="1160" height="30" text="OK: Play / Details    Play/Pause: My List    Replay: Retry    *: Sign in on TV" />
+    <Rectangle id="sideRailBg" translation="[0,0]" width="190" height="720" color="0x041016F2" />
+    <Label id="brandLabel" translation="[30,34]" width="130" height="44" color="0xFFD54AFF" horizAlign="center" text="MENU" />
+    <Group id="navHomeGroup" translation="[18,130]">
+      <Rectangle id="navHomeBg" width="154" height="46" color="0x0C1F2900" />
+      <Label id="navHomeLabel" translation="[18,10]" width="118" height="28" color="0xF5F7FAFF" text="Home" />
+    </Group>
+    <Group id="navMyListGroup" translation="[18,190]">
+      <Rectangle id="navMyListBg" width="154" height="46" color="0x0C1F2900" />
+      <Label id="navMyListLabel" translation="[18,10]" width="118" height="28" color="0xB8C6D1FF" text="My List" />
+    </Group>
+    <Group id="navAccountGroup" translation="[18,250]">
+      <Rectangle id="navAccountBg" width="154" height="46" color="0x0C1F2900" />
+      <Label id="navAccountLabel" translation="[18,10]" width="118" height="28" color="0xB8C6D1FF" text="Account" />
+    </Group>
+    <Label id="navHelpLabel" visible="false" translation="[24,610]" width="142" height="70" color="0x8496A3FF" numLines="3" wrap="true" text="" />
 
-    <Group id="heroPanel" translation="[40,146]">
-      <Poster id="heroPoster" translation="[0,0]" width="840" height="238" />
-      <Rectangle translation="[0,0]" width="840" height="238" color="0x2A0E14B8" />
-      <Label id="heroKicker" translation="[24,20]" width="730" height="30" text="Featured" />
-      <Label id="heroTitle" translation="[24,52]" width="790" height="56" numLines="2" wrap="true" text="" />
-      <Label id="heroMeta" translation="[24,112]" width="790" height="30" text="" />
-      <Label id="heroSynopsis" translation="[24,144]" width="790" height="56" numLines="2" wrap="true" text="" />
-      <Label id="heroDots" translation="[24,210]" width="790" height="24" text="" />
+    <Label id="headerLabel" visible="false" translation="[220,38]" width="650" height="46" color="0xF5F7FAFF" text="" />
+    <Label id="statusLabel" visible="false" translation="[220,78]" width="650" height="32" color="0xF5F7FAFF" text="" />
+    <Label id="hintLabel" visible="false" translation="[220,86]" width="650" height="30" color="0xB8C6D1FF" text="" />
+    <Poster id="logoPoster" translation="[1060,22]" width="150" height="100" uri="pkg:/images/main-logo.png" />
+    <Label id="authShortcutLabel" visible="false" translation="[960,110]" width="250" height="32" color="0xD7E0E8FF" horizAlign="right" numLines="1" wrap="true" text="" />
+    <Group id="signInButtonGroup" translation="[980,102]" visible="false">
+      <Rectangle id="signInButtonBg" width="240" height="44" color="0x16313FFF" />
+      <Label id="signInButtonLabel" translation="[18,8]" width="204" height="28" color="0xF5F7FAFF" horizAlign="center" text="Sign in on TV" />
     </Group>
 
-    <RowList id="homeRows" translation="[40,406]" itemSize="[344,194]" numRows="2" rowHeights="[238]" rowItemSize="[[344,194]]" />
-
-    <Group id="detailPanel" translation="[900,146]">
-      <Rectangle width="320" height="500" color="0x0C1F29EE" />
-      <Label id="detailTitle" translation="[20,20]" width="280" height="60" text="Select a title" />
-      <Label id="detailMeta" translation="[20,86]" width="280" height="50" text="" />
-      <Label id="detailSynopsis" translation="[20,136]" width="280" height="200" numLines="8" wrap="true" text="" />
-      <Label id="detailVideoStatus" translation="[20,348]" width="280" height="34" text="" />
-      <Label id="detailAuthStatus" translation="[20,382]" width="280" height="50" numLines="2" wrap="true" text="" />
-      <Label id="detailAction" translation="[20,442]" width="280" height="34" text="Press OK to play selected title" />
+    <Group id="heroPanel" translation="[220,104]">
+      <Poster id="heroPoster" translation="[0,0]" width="1010" height="230" />
+      <Video id="heroPreviewVideo" translation="[0,0]" width="1010" height="230" visible="false" />
+      <Rectangle translation="[0,0]" width="1010" height="230" color="0x07131AB8" />
+      <Label id="heroKicker" translation="[24,18]" width="720" height="28" color="0xFFD54AFF" text="Featured" />
+      <Label id="heroTitle" translation="[24,48]" width="720" height="56" color="0xF5F7FAFF" numLines="2" wrap="true" text="" />
+      <Label id="heroMeta" translation="[24,108]" width="720" height="28" color="0xD7E0E8FF" text="" />
+      <Label id="heroSynopsis" translation="[24,138]" width="720" height="52" color="0xD7E0E8FF" numLines="2" wrap="true" text="" />
+      <Label id="heroDots" translation="[24,196]" width="720" height="24" color="0xB8C6D1FF" text="" />
     </Group>
 
-    <Group id="authPanel" visible="false" translation="[260,170]">
+    <RowList id="homeRows" translation="[220,384]" itemSize="[1010,180]" numRows="2" rowHeights="[232,232]" rowItemSize="[[220,164]]" rowItemSpacing="[[18,0]]" itemComponentName="VideoCard" showRowLabel="true" drawFocusFeedback="false" />
+
+    <Group id="detailPanel" visible="false" translation="[778,168]">
+      <Rectangle width="430" height="188" color="0x07131AE6" />
+      <Label id="detailTitle" translation="[20,16]" width="390" height="48" color="0xF5F7FAFF" text="Select a title" />
+      <Label id="detailMeta" translation="[20,66]" width="390" height="26" color="0xD7E0E8FF" text="" />
+      <Label id="detailSynopsis" translation="[20,94]" width="390" height="44" color="0xD7E0E8FF" numLines="2" wrap="true" text="" />
+      <Label id="detailVideoStatus" translation="[20,142]" width="170" height="24" color="0xFFD54AFF" text="" />
+      <Label id="detailAuthStatus" translation="[196,142]" width="214" height="24" color="0xD7E0E8FF" numLines="1" wrap="true" text="" />
+      <Label id="detailAction" translation="[20,164]" width="390" height="22" color="0xF5F7FAFF" numLines="1" wrap="true" text="OK to play" />
+    </Group>
+
+    <Group id="authPanel" visible="false" translation="[0,0]">
+      <Rectangle width="1280" height="720" color="0x02080BE8" />
+      <Group translation="[260,170]">
       <Rectangle width="760" height="380" color="0x041016F4" />
-      <Label id="authTitle" translation="[30,24]" width="700" height="50" text="Sign in on the web" />
-      <Label id="authCodeLabel" translation="[30,90]" width="700" height="90" horizAlign="center" text="------" />
-      <Label id="authUrlLabel" translation="[30,190]" width="700" height="70" horizAlign="center" numLines="2" wrap="true" text="Open Flyhigh.tv/activate" />
-      <Label id="authStatusLabel" translation="[30,272]" width="700" height="50" horizAlign="center" text="Waiting for approval..." />
-      <Label id="authCloseHint" translation="[30,328]" width="700" height="34" horizAlign="center" text="Back: close this panel" />
+      <Label id="authTitle" translation="[30,24]" width="700" height="50" color="0xF5F7FAFF" text="Sign in on the web" />
+      <Label id="authCodeLabel" translation="[30,90]" width="700" height="90" color="0xFFD54AFF" horizAlign="center" text="------" />
+      <Label id="authUrlLabel" translation="[30,190]" width="700" height="70" color="0xF5F7FAFF" horizAlign="center" numLines="2" wrap="true" text="Open Flyhigh.tv/activate" />
+      <Label id="authStatusLabel" translation="[30,272]" width="700" height="42" color="0xD7E0E8FF" horizAlign="center" text="Waiting for approval..." />
+      <Label id="authCloseHint" translation="[30,318]" width="700" height="52" color="0xB8C6D1FF" horizAlign="center" numLines="2" text="Back or Left: close this panel" />
+      </Group>
     </Group>
 
     <Timer id="pollTimer" duration="5" repeat="true" />
+    <Timer id="deviceStartTimeoutTimer" duration="10" repeat="false" />
     <Timer id="heroTimer" duration="6" repeat="true" />
+    <Timer id="heroPreviewDelayTimer" duration="1" repeat="false" />
     <Video id="videoPlayer" visible="false" width="1280" height="720" />
 
     <JsonRequestTask id="homeTask" />
+    <JsonRequestTask id="continueWatchingTask" />
     <JsonRequestTask id="myListTask" />
     <JsonRequestTask id="myListToggleTask" />
     <JsonRequestTask id="deviceStartTask" />

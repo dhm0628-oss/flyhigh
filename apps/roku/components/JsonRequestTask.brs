@@ -16,40 +16,69 @@ sub run()
 
     url = baseUrl + path
     xfer = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    xfer.SetMessagePort(port)
     xfer.SetUrl(url)
     xfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
     xfer.InitClientCertificates()
-    xfer.SetRequest("User-Agent", "FlyhighRoku/0.1")
-    xfer.SetRequest("Accept", "application/json")
+    xfer.AddHeader("User-Agent", "FlyhighRoku/0.1")
+    xfer.AddHeader("Accept", "application/json")
 
     authToken = m.top.authToken
     if authToken <> invalid and authToken <> ""
-        xfer.SetRequest("Authorization", "Bearer " + authToken)
+        xfer.AddHeader("Authorization", "Bearer " + authToken)
     end if
 
     method = UCase(m.top.method)
-    body = m.top.body
+    bodyJson = m.top.bodyJson
 
-    responseText = ""
+    started = false
     if method = "POST" or method = "PATCH"
-        xfer.SetRequest("Content-Type", "application/json")
+        xfer.AddHeader("Content-Type", "application/json")
         payload = "{}"
-        if body <> invalid then payload = FormatJson(body)
+        if bodyJson <> invalid and bodyJson <> "" then payload = bodyJson
 
-        if method = "POST"
-            responseText = xfer.PostFromString(payload)
-        else
+        if method = "PATCH"
             xfer.SetRequestMethod("PATCH")
-            responseText = xfer.PostFromString(payload)
         end if
+        started = xfer.AsyncPostFromString(payload)
     else if method = "DELETE"
         xfer.SetRequestMethod("DELETE")
-        responseText = xfer.PostFromString("")
+        started = xfer.AsyncPostFromString("")
     else
-        responseText = xfer.GetToString()
+        started = xfer.AsyncGetToString()
     end if
 
-    m.top.statusCode = xfer.GetResponseCode()
+    if started <> true then
+        m.top.errorMessage = "Network request could not start"
+        m.top.statusCode = 0
+        return
+    end if
+
+    msg = wait(15000, port)
+    if msg = invalid then
+        xfer.AsyncCancel()
+        m.top.errorMessage = "Network request timed out"
+        m.top.statusCode = 0
+        return
+    end if
+
+    responseText = invalid
+    if type(msg) = "roUrlEvent" then
+        m.top.statusCode = msg.GetResponseCode()
+        responseText = msg.GetString()
+        if responseText = invalid or responseText = "" then
+            failureReason = msg.GetFailureReason()
+            if failureReason <> invalid and failureReason <> "" then
+                m.top.errorMessage = failureReason
+                return
+            end if
+        end if
+    else
+        m.top.errorMessage = "Unexpected network response"
+        m.top.statusCode = 0
+        return
+    end if
 
     if responseText = invalid then
         m.top.errorMessage = "Network request failed"
@@ -64,6 +93,10 @@ sub run()
             m.top.errorMessage = "HTTP " + m.top.statusCode.ToStr()
         end if
         return
+    end if
+
+    if parsed.statusCode <> invalid then
+        m.top.statusCode = parsed.statusCode
     end if
 
     if m.top.statusCode < 200 or m.top.statusCode >= 300

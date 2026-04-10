@@ -5,6 +5,7 @@
     <field id="path" type="string" />
     <field id="method" type="string" value="GET" />
     <field id="body" type="assocarray" />
+    <field id="bodyJson" type="string" value="" />
     <field id="authToken" type="string" />
     <field id="requestTag" type="string" />
     <field id="response" type="assocarray" />
@@ -13,4 +14,3 @@
   </interface>
   <script type="text/brightscript" uri="pkg:/components/JsonRequestTask.brs" />
 </component>
-

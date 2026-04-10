@@ -1,11 +1,32 @@
-﻿sub init()
+function Flyhigh_GetConfig() as Object
+    return {
+        apiBaseUrl: "https://api.flyhigh.tv"
+        webActivateBaseUrl: "https://app.flyhigh.tv"
+        appName: "roku-beta"
+    }
+end function
+
+sub init()
     m.config = Flyhigh_GetConfig()
 
     m.headerLabel = m.top.findNode("headerLabel")
     m.statusLabel = m.top.findNode("statusLabel")
     m.hintLabel = m.top.findNode("hintLabel")
+    m.authShortcutLabel = m.top.findNode("authShortcutLabel")
+    m.navHomeBg = m.top.findNode("navHomeBg")
+    m.navHomeLabel = m.top.findNode("navHomeLabel")
+    m.navMyListBg = m.top.findNode("navMyListBg")
+    m.navMyListLabel = m.top.findNode("navMyListLabel")
+    m.navAccountBg = m.top.findNode("navAccountBg")
+    m.navAccountLabel = m.top.findNode("navAccountLabel")
+    m.signInButtonGroup = m.top.findNode("signInButtonGroup")
+    m.signInButtonBg = m.top.findNode("signInButtonBg")
+    m.signInButtonLabel = m.top.findNode("signInButtonLabel")
+    m.debugLabel = m.top.findNode("debugLabel")
+    m.debugItemsLabel = m.top.findNode("debugItemsLabel")
     m.heroPanel = m.top.findNode("heroPanel")
     m.heroPoster = m.top.findNode("heroPoster")
+    m.heroPreviewVideo = m.top.findNode("heroPreviewVideo")
     m.heroTitle = m.top.findNode("heroTitle")
     m.heroMeta = m.top.findNode("heroMeta")
     m.heroSynopsis = m.top.findNode("heroSynopsis")
@@ -23,18 +44,25 @@
     m.authCodeLabel = m.top.findNode("authCodeLabel")
     m.authUrlLabel = m.top.findNode("authUrlLabel")
     m.authStatusLabel = m.top.findNode("authStatusLabel")
+    m.authCloseHint = m.top.findNode("authCloseHint")
     m.pollTimer = m.top.findNode("pollTimer")
+    m.deviceStartTimeoutTimer = m.top.findNode("deviceStartTimeoutTimer")
     m.heroTimer = m.top.findNode("heroTimer")
+    m.heroPreviewDelayTimer = m.top.findNode("heroPreviewDelayTimer")
     m.videoPlayer = m.top.findNode("videoPlayer")
 
     m.homeTask = m.top.findNode("homeTask")
+    m.continueWatchingTask = m.top.findNode("continueWatchingTask")
     m.myListTask = m.top.findNode("myListTask")
     m.myListToggleTask = m.top.findNode("myListToggleTask")
     m.deviceStartTask = m.top.findNode("deviceStartTask")
     m.devicePollTask = m.top.findNode("devicePollTask")
     m.playbackTask = m.top.findNode("playbackTask")
 
+    m.baseRows = []
     m.feedRows = []
+    m.continueWatchingItems = []
+    m.myListItems = []
     m.myListIds = CreateObject("roAssociativeArray")
     m.currentItem = invalid
     m.homeLoadFailed = false
@@ -42,11 +70,16 @@
     m.deviceLoginId = ""
     m.deviceCode = ""
     m.devicePollInFlight = false
+    m.authFlowActive = false
     m.deviceAccessToken = loadDeviceToken()
     m.heroItems = []
     m.heroIndex = 0
+    m.primaryFocusZone = "rows"
+    m.navIndex = 0
+    m.navRows = ["home", "my-list", "account"]
 
     setupTask(m.homeTask, "onHomeTaskResponse", "onHomeTaskError")
+    setupTask(m.continueWatchingTask, "onContinueWatchingTaskResponse", "onContinueWatchingTaskError")
     setupTask(m.myListTask, "onMyListTaskResponse", "onMyListTaskError")
     setupTask(m.myListToggleTask, "onMyListToggleTaskResponse", "onMyListToggleTaskError")
     setupTask(m.deviceStartTask, "onDeviceStartTaskResponse", "onDeviceStartTaskError")
@@ -55,8 +88,12 @@
 
     m.rowList.observeField("rowItemFocused", "onRowItemFocused")
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
+    m.deviceStartTask.observeField("state", "onDeviceStartTaskState")
     m.pollTimer.observeField("fire", "onPollTimerFire")
+    m.deviceStartTimeoutTimer.observeField("fire", "onDeviceStartTimeout")
     m.heroTimer.observeField("fire", "onHeroTimerFire")
+    m.heroPreviewDelayTimer.observeField("fire", "onHeroPreviewDelayFire")
+    m.heroPreviewVideo.observeField("state", "onHeroPreviewVideoStateChanged")
     m.videoPlayer.observeField("state", "onVideoStateChanged")
 
     m.top.setFocus(true)
@@ -67,6 +104,9 @@
     else
         m.detailAuthStatus.text = "Not signed in on TV (press *)"
     end if
+    refreshAuthCopy()
+    renderNavigation()
+    m.debugLabel.text = "Flyhigh Roku Beta mounted"
 
     loadHomeFeed()
 end sub
@@ -90,12 +130,30 @@ sub loadMyList()
     runTask(m.myListTask, "/v1/viewer/my-list", "GET", invalid, m.deviceAccessToken, "my-list")
 end sub
 
+sub loadContinueWatching()
+    if m.deviceAccessToken = invalid or m.deviceAccessToken = "" then
+        m.continueWatchingItems = []
+        rebuildPersonalizedRows()
+        return
+    end if
+    runTask(m.continueWatchingTask, "/v1/viewer/continue-watching", "GET", invalid, m.deviceAccessToken, "continue-watching")
+end sub
+
 sub runTask(task as Object, path as String, method = "GET" as String, body = invalid as Dynamic, authToken = "" as String, requestTag = "" as String)
     task.control = "STOP"
     task.apiBaseUrl = m.config.apiBaseUrl
     task.path = path
     task.method = method
     task.body = body
+    task.bodyJson = "{}"
+    if body <> invalid then
+        bodyType = type(body)
+        if bodyType = "roString" or bodyType = "String" then
+            task.bodyJson = body
+        else
+            task.bodyJson = FormatJson(body)
+        end if
+    end if
     task.authToken = authToken
     task.requestTag = requestTag
     task.control = "RUN"
@@ -117,16 +175,28 @@ sub onHomeTaskResponse()
 
     setHeroItems(featuredItems)
 
+    m.baseRows = rows
     m.feedRows = rows
     m.homeLoadFailed = false
 
     renderRows()
-    m.statusLabel.text = "Loaded " + rows.Count().ToStr() + " rows"
+    if featuredItems.Count() > 0 then
+        m.debugLabel.text = "Featured: " + safeToString(featuredItems[0].title)
+    else
+        m.debugLabel.text = "No featured item returned"
+    end if
+    if rows.Count() > 0 and rows[0].items <> invalid and rows[0].items.Count() > 0 then
+        m.debugItemsLabel.text = rows[0].title + ": " + safeToString(rows[0].items[0].title)
+    else
+        m.debugItemsLabel.text = "No row items returned"
+    end if
 
     if m.deviceAccessToken <> "" then
+        loadContinueWatching()
         loadMyList()
     else
-        clearMyListRow()
+        m.continueWatchingItems = []
+        rebuildPersonalizedRows()
     end if
 
     focused = m.rowList.rowItemFocused
@@ -141,7 +211,7 @@ sub renderRows()
     root = CreateObject("roSGNode", "ContentNode")
     for each row in m.feedRows
         rowNode = CreateObject("roSGNode", "ContentNode")
-        rowNode.Title = row.title
+        rowNode.title = safeToString(row.title)
 
         items = []
         if row.items <> invalid then items = row.items
@@ -152,16 +222,30 @@ sub renderRows()
             itemNode.AddField("synopsis", "string", false)
             itemNode.AddField("isPremium", "boolean", false)
             itemNode.AddField("videoStatus", "string", false)
-            itemNode.Title = item.title
-            itemNode.ShortDescriptionLine1 = item.title
-            yearLabel = "n/a"
-            if item.releaseYear <> invalid then yearLabel = safeToString(item.releaseYear)
-            itemNode.ShortDescriptionLine2 = safeToString(item.type) + " | " + yearLabel
-            itemNode.HDPosterUrl = item.posterUrl
+            itemNode.AddField("releaseYear", "string", false)
+            itemNode.AddField("durationMinutes", "string", false)
+            itemNode.AddField("specialAction", "string", false)
+            itemNode.AddField("previewUrl", "string", false)
+            itemNode.title = safeToString(item.title)
+            itemNode.shortDescriptionLine1 = ""
+            yearLabel = getReleaseYearLabel(item)
+            durationLabel = getDurationMinutesLabel(item)
+            metaLine = safeToString(item.type) + " | " + yearLabel + " | " + durationLabel + " min"
+            if safeToString(item.specialAction) = "sign-in" then
+                metaLine = "Account | Activate this TV"
+            else if safeToString(item.specialAction) = "account" then
+                metaLine = "Account | Signed in"
+            end if
+            itemNode.shortDescriptionLine2 = metaLine
+            itemNode.hdPosterUrl = getPosterUrl(item)
             itemNode.contentId = item.id
             itemNode.slug = item.slug
             itemNode.synopsis = item.synopsis
             itemNode.isPremium = item.isPremium
+            itemNode.releaseYear = yearLabel
+            itemNode.durationMinutes = durationLabel
+            itemNode.specialAction = safeToString(item.specialAction)
+            itemNode.previewUrl = getPreviewUrl(item)
             rowNode.AppendChild(itemNode)
         end for
 
@@ -194,15 +278,31 @@ sub renderHero()
     if m.heroIndex >= m.heroItems.Count() then m.heroIndex = 0
     item = m.heroItems[m.heroIndex]
 
-    m.heroPoster.uri = safeToString(item.posterUrl)
+    m.heroPoster.uri = getPosterUrl(item)
+    scheduleHeroPreview(item)
     m.heroTitle.text = safeToString(item.title)
-    yearLabel = "n/a"
-    if item.releaseYear <> invalid then yearLabel = safeToString(item.releaseYear)
-    durationMin = "0"
-    if item.durationSeconds <> invalid then durationMin = Int(item.durationSeconds / 60).ToStr()
+    yearLabel = getReleaseYearLabel(item)
+    durationMin = getDurationMinutesLabel(item)
     m.heroMeta.text = safeToString(item.type) + " | " + yearLabel + " | " + durationMin + " min"
     m.heroSynopsis.text = safeToString(item.synopsis)
     m.heroDots.text = (m.heroIndex + 1).ToStr() + "/" + m.heroItems.Count().ToStr() + "  -  OK to play selected title"
+end sub
+
+sub renderHeroForItem(item as Object)
+    if item = invalid then return
+    if safeToString(item.specialAction) <> "" then return
+
+    m.heroTimer.control = "stop"
+    m.heroPanel.visible = true
+    m.heroPoster.uri = getPosterUrl(item)
+    scheduleHeroPreview(item)
+    m.heroTitle.text = safeToString(item.title)
+    m.heroMeta.text = safeToString(item.type) + " | " + getReleaseYearLabel(item) + " | " + getDurationMinutesLabel(item) + " min"
+    m.heroSynopsis.text = safeToString(item.synopsis)
+
+    premiumLabel = "Free"
+    if item.isPremium = true then premiumLabel = "Subscriber"
+    m.heroDots.text = premiumLabel + "  -  OK to play"
 end sub
 
 sub onHeroTimerFire()
@@ -211,20 +311,94 @@ sub onHeroTimerFire()
     renderHero()
 end sub
 
+sub scheduleHeroPreview(item as Object)
+    stopHeroPreview()
+    previewUrl = getPreviewUrl(item)
+    if previewUrl = "" then return
+    m.heroPreviewDelayTimer.control = "start"
+end sub
+
+sub stopHeroPreview()
+    m.heroPreviewDelayTimer.control = "stop"
+    if m.heroPreviewVideo <> invalid then
+        m.heroPreviewVideo.control = "stop"
+        m.heroPreviewVideo.visible = false
+        m.heroPreviewVideo.content = invalid
+    end if
+end sub
+
+sub onHeroPreviewDelayFire()
+    if m.currentItem = invalid then return
+    previewUrl = getPreviewUrl(m.currentItem)
+    if previewUrl = "" then return
+
+    content = CreateObject("roSGNode", "ContentNode")
+    content.title = safeToString(m.currentItem.title)
+    content.url = previewUrl
+    content.streamFormat = "hls"
+
+    m.heroPreviewVideo.visible = true
+    m.heroPreviewVideo.content = content
+    m.heroPreviewVideo.control = "play"
+end sub
+
+sub onHeroPreviewVideoStateChanged()
+    state = LCase(safeToString(m.heroPreviewVideo.state))
+    if state = "error" or state = "stopped" then
+        m.heroPreviewVideo.visible = false
+    else if state = "finished" then
+        if m.heroPreviewVideo.content <> invalid then
+            m.heroPreviewVideo.control = "play"
+        end if
+    end if
+end sub
+
 sub onHomeTaskError()
     if m.homeTask.errorMessage = invalid or m.homeTask.errorMessage = "" then return
     m.homeLoadFailed = true
     m.statusLabel.text = "Home feed error: " + m.homeTask.errorMessage
+    m.debugLabel.text = "Home feed failed"
+    m.debugItemsLabel.text = m.homeTask.errorMessage
     m.hintLabel.text = "Replay: Retry home feed    OK: Play    Play/Pause: My List    *: TV Sign-in"
 end sub
 
+sub rebuildPersonalizedRows()
+    nextRows = []
+
+    if m.continueWatchingItems <> invalid and m.continueWatchingItems.Count() > 0 then
+        nextRows.Push({
+            id: "continue-watching"
+            title: "Continue Watching"
+            items: m.continueWatchingItems
+        })
+    end if
+
+    if m.myListItems <> invalid and m.myListItems.Count() > 0 then
+        nextRows.Push({
+            id: "my-list"
+            title: "My List"
+            items: m.myListItems
+        })
+    end if
+
+    for each row in m.baseRows
+        nextRows.Push(row)
+    end for
+
+    m.feedRows = nextRows
+    renderRows()
+end sub
+
 sub onRowItemFocused()
+    if m.primaryFocusZone <> "rows" then return
     idx = m.rowList.rowItemFocused
     if idx = invalid then return
     showDetailFromIndexes(idx)
+    renderHeroForItem(m.currentItem)
 end sub
 
 sub onRowItemSelected()
+    if m.primaryFocusZone <> "rows" then return
     idx = m.rowList.rowItemSelected
     if idx = invalid then idx = m.rowList.rowItemFocused
     if idx = invalid then return
@@ -238,24 +412,41 @@ sub showDetailFromIndexes(idx as Object)
     m.currentItem = item
 
     title = safeToString(item.title)
-    releaseYear = "n/a"
-    if item.releaseYear <> invalid then releaseYear = safeToString(item.releaseYear)
-    durationMin = "0"
-    if item.durationSeconds <> invalid then durationMin = Int(item.durationSeconds / 60).ToStr()
+    specialAction = safeToString(item.specialAction)
+    releaseYear = getReleaseYearLabel(item)
+    durationMin = getDurationMinutesLabel(item)
 
     m.detailTitle.text = title
-    m.detailMeta.text = safeToString(item.type) + " | " + releaseYear + " | " + durationMin + " min"
+    if specialAction = "sign-in" then
+        m.detailMeta.text = "Account | Activate this TV"
+    else if specialAction = "account" then
+        m.detailMeta.text = "Account | Signed in"
+    else
+        m.detailMeta.text = safeToString(item.type) + " | " + releaseYear + " | " + durationMin + " min"
+    end if
     m.detailSynopsis.text = safeToString(item.synopsis)
     premiumLabel = "Free"
     if item.isPremium = true then premiumLabel = "Subscriber only"
-    m.detailVideoStatus.text = "Visibility: " + premiumLabel
+    if specialAction = "sign-in" then
+        m.detailVideoStatus.text = "Status: Sign in recommended"
+    else if specialAction = "account" then
+        m.detailVideoStatus.text = "Status: TV linked"
+    else
+        m.detailVideoStatus.text = "Visibility: " + premiumLabel
+    end if
     if m.deviceAccessToken <> "" then
         m.detailAuthStatus.text = "TV signed in"
     else
         m.detailAuthStatus.text = "TV not signed in (press * to activate)"
     end if
 
-    if isInMyList(safeToString(item.id)) then
+    if specialAction = "sign-in" then
+        m.detailAction.text = "Press OK to open the sign-in code screen"
+    else if specialAction = "account" then
+        m.detailAction.text = "Press OK to refresh TV sign-in"
+    else if m.deviceAccessToken = "" and item.isPremium = true then
+        m.detailAction.text = "Press OK to sign in and play this title"
+    else if isInMyList(safeToString(item.id)) then
         m.detailAction.text = "Press OK to play selected title | Play/Pause: Remove from My List"
     else
         m.detailAction.text = "Press OK to play selected title | Play/Pause: Add to My List"
@@ -268,18 +459,22 @@ function isInMyList(contentId as String) as Boolean
     return m.myListIds.DoesExist(contentId)
 end function
 
+function isPersonalizedRowId(rowId as String) as Boolean
+    return rowId = "my-list" or rowId = "continue-watching" or rowId = "sign-in" or rowId = "account"
+end function
+
+function prependRow(rows as Object, row as Object) as Object
+    mergedRows = [row]
+    for each existingRow in rows
+        mergedRows.Push(existingRow)
+    end for
+    return mergedRows
+end function
+
 sub clearMyListRow()
     m.myListIds = CreateObject("roAssociativeArray")
-    nextRows = []
-    for each row in m.feedRows
-        if row <> invalid and row.id <> invalid and LCase(safeToString(row.id)) = "my-list" then
-            ' skip
-        else
-            nextRows.Push(row)
-        end if
-    end for
-    m.feedRows = nextRows
-    renderRows()
+    m.myListItems = []
+    rebuildPersonalizedRows()
 end sub
 
 sub upsertMyListRow(items as Object, title as String)
@@ -292,31 +487,8 @@ sub upsertMyListRow(items as Object, title as String)
         end if
     end for
     m.myListIds = idMap
-
-    nextRows = []
-    for each row in m.feedRows
-        if row <> invalid and row.id <> invalid and LCase(safeToString(row.id)) = "my-list" then
-            ' skip existing row; we will reinsert at top if needed
-        else
-            nextRows.Push(row)
-        end if
-    end for
-
-    if items.Count() > 0 then
-        myListRow = {
-            id: "my-list"
-            title: title
-            items: items
-        }
-        mergedRows = [myListRow]
-        for each row in nextRows
-            mergedRows.Push(row)
-        end for
-        m.feedRows = mergedRows
-    else
-        m.feedRows = nextRows
-    end if
-    renderRows()
+    m.myListItems = items
+    rebuildPersonalizedRows()
 end sub
 
 sub onMyListTaskResponse()
@@ -330,6 +502,23 @@ sub onMyListTaskResponse()
 
     upsertMyListRow(items, title)
     showDetailFromIndexes(m.rowList.rowItemFocused)
+end sub
+
+sub onContinueWatchingTaskResponse()
+    res = m.continueWatchingTask.response
+    if res = invalid then return
+
+    items = []
+    if res.items <> invalid then items = res.items
+
+    m.continueWatchingItems = items
+    rebuildPersonalizedRows()
+    showDetailFromIndexes(m.rowList.rowItemFocused)
+end sub
+
+sub onContinueWatchingTaskError()
+    if m.continueWatchingTask.errorMessage = invalid or m.continueWatchingTask.errorMessage = "" then return
+    m.statusLabel.text = "Continue Watching load error: " + m.continueWatchingTask.errorMessage
 end sub
 
 sub onMyListTaskError()
@@ -353,8 +542,8 @@ sub toggleMyList(item as Object)
         runTask(m.myListToggleTask, path, "DELETE", invalid, m.deviceAccessToken, "my-list-remove")
         m.statusLabel.text = "Removing from My List..."
     else
-        body = { contentId: contentId }
-        runTask(m.myListToggleTask, "/v1/viewer/my-list", "POST", body, m.deviceAccessToken, "my-list-add")
+    bodyJson = "{""contentId"":""" + contentId + """}"
+    runTask(m.myListToggleTask, "/v1/viewer/my-list", "POST", bodyJson, m.deviceAccessToken, "my-list-add")
         m.statusLabel.text = "Adding to My List..."
     end if
 end sub
@@ -383,49 +572,96 @@ function getItemAtIndexes(idx as Object) as Dynamic
 end function
 
 sub beginDeviceLogin()
-    m.authPanel.visible = true
-    m.authCodeLabel.text = "------"
-    m.authUrlLabel.text = m.config.webActivateBaseUrl + "/activate"
-    m.authStatusLabel.text = "Requesting device code..."
+    stopHeroPreview()
+    m.primaryFocusZone = "rows"
+    m.authFlowActive = true
+    m.authPanel.visible = false
+    m.rowList.setFocus(true)
+    m.top.setFocus(true)
+    renderNavigation()
+    m.statusLabel.text = "Requesting TV activation code..."
+    m.detailTitle.text = "Activate this TV"
+    m.detailMeta.text = "Requesting code..."
+    m.detailSynopsis.text = "Keep browsing if you want. When the code appears here, open the activation URL on your phone or computer."
+    m.detailVideoStatus.text = "Account"
+    m.detailAuthStatus.text = "Waiting for device code"
+    m.detailAction.text = "Press Back to cancel sign-in"
     m.deviceLoginId = ""
     m.deviceCode = ""
     m.devicePollInFlight = false
 
-    body = { clientName: m.config.appName }
+    body = "{""clientName"":""" + m.config.appName + """}"
+    m.deviceStartTimeoutTimer.control = "start"
     runTask(m.deviceStartTask, "/v1/device-auth/start", "POST", body, "", "device-start")
+end sub
+
+sub onDeviceStartTaskState()
+    state = safeToString(m.deviceStartTask.state)
+    if m.authFlowActive <> true then return
+    if m.deviceCode <> "" then return
+    if state <> "" then
+        m.detailAuthStatus.text = "Device-code request state: " + state
+    end if
+end sub
+
+sub closeAuthPanel()
+    m.authPanel.visible = false
+    m.authFlowActive = false
+    m.pollTimer.control = "stop"
+    m.deviceStartTimeoutTimer.control = "stop"
+    setPrimaryFocusZone("rows")
 end sub
 
 sub onDeviceStartTaskResponse()
     res = m.deviceStartTask.response
     if res = invalid then return
+    m.deviceStartTimeoutTimer.control = "stop"
 
     m.deviceLoginId = safeToString(res.deviceLoginId)
     m.deviceCode = safeToString(res.userCode)
 
     if m.deviceCode = "" or m.deviceLoginId = "" then
-        m.authStatusLabel.text = "Could not start device login"
+        m.detailAuthStatus.text = "Could not start device login"
         return
     end if
 
     m.authCodeLabel.text = m.deviceCode
     m.authUrlLabel.text = m.config.webActivateBaseUrl + "/activate?code=" + m.deviceCode
     m.authStatusLabel.text = "On a phone/computer, open the URL and approve this code"
+    m.statusLabel.text = "Activation code ready"
+    m.detailTitle.text = "Activate this TV"
+    m.detailMeta.text = "Code: " + m.deviceCode
+    m.detailSynopsis.text = "Open " + m.config.webActivateBaseUrl + "/activate?code=" + m.deviceCode + " on your phone or computer, then approve this Roku."
+    m.detailVideoStatus.text = "Account"
+    m.detailAuthStatus.text = "Waiting for approval..."
+    m.detailAction.text = "Press Back to cancel sign-in"
     m.pollTimer.control = "start"
 end sub
 
 sub onDeviceStartTaskError()
     if m.deviceStartTask.errorMessage = invalid or m.deviceStartTask.errorMessage = "" then return
-    m.authPanel.visible = true
-    m.authStatusLabel.text = "Device login error: " + m.deviceStartTask.errorMessage
+    m.deviceStartTimeoutTimer.control = "stop"
+    m.authFlowActive = false
+    m.detailAuthStatus.text = "Device login error: " + m.deviceStartTask.errorMessage
+    m.statusLabel.text = "Device login error"
+end sub
+
+sub onDeviceStartTimeout()
+    if m.authFlowActive <> true then return
+    if m.deviceCode <> "" then return
+    m.detailMeta.text = "Still requesting code..."
+    m.detailAuthStatus.text = "No activation code yet. Press OK on Account to retry."
+    m.detailAction.text = "You can keep browsing. Press OK on Account to request a fresh code."
+    m.statusLabel.text = "Activation code request is taking longer than expected"
 end sub
 
 sub onPollTimerFire()
     if m.deviceLoginId = "" then return
     if m.devicePollInFlight then return
-    if m.authPanel.visible <> true then return
+    if m.authFlowActive <> true then return
 
     m.devicePollInFlight = true
-    body = { deviceLoginId: m.deviceLoginId }
+    body = "{""deviceLoginId"":""" + m.deviceLoginId + """}"
     runTask(m.devicePollTask, "/v1/device-auth/poll", "POST", body, "", "device-poll")
 end sub
 
@@ -439,6 +675,7 @@ sub onDevicePollTaskResponse()
 
     if status = "pending" then
         m.authStatusLabel.text = "Waiting for approval..."
+        m.detailAuthStatus.text = "Waiting for approval..."
         return
     else if status = "approved" then
         token = safeToString(res.accessToken)
@@ -446,22 +683,42 @@ sub onDevicePollTaskResponse()
             m.deviceAccessToken = token
             saveDeviceToken(token)
             m.detailAuthStatus.text = "TV signed in"
+            refreshAuthCopy()
+
             viewerName = ""
-            if res.viewer <> invalid and res.viewer.displayName <> invalid then viewerName = safeToString(res.viewer.displayName)
-                            m.authStatusLabel.text = "Approved for " + viewerName
-                            m.pollTimer.control = "stop"
-                            m.authPanel.visible = false
-                            m.statusLabel.text = "TV sign-in complete"
-                            loadMyList()
-                        end if
+            if res.viewer <> invalid and res.viewer.displayName <> invalid then
+                viewerName = safeToString(res.viewer.displayName)
+            end if
+
+            if viewerName <> "" then
+                m.authStatusLabel.text = "Approved for " + viewerName
+            else
+                m.authStatusLabel.text = "TV sign-in approved"
+            end if
+
+            m.pollTimer.control = "stop"
+            m.authFlowActive = false
+            m.authPanel.visible = false
+            m.statusLabel.text = "TV sign-in complete"
+            m.detailAuthStatus.text = "TV signed in"
+            setPrimaryFocusZone("rows")
+            rebuildPersonalizedRows()
+            loadContinueWatching()
+            loadMyList()
+        else
+            m.detailAuthStatus.text = "Approval received without access token"
+        end if
     else if status = "expired" then
-        m.authStatusLabel.text = "Code expired. Press * to request a new code."
+        m.detailAuthStatus.text = "Code expired. Press OK on Account to request a new code."
+        m.authFlowActive = false
         m.pollTimer.control = "stop"
     else if status = "denied" then
-        m.authStatusLabel.text = "Code denied. Press * to try again."
+        m.detailAuthStatus.text = "Code denied. Press OK on Account to try again."
+        m.authFlowActive = false
         m.pollTimer.control = "stop"
     else if status = "consumed" then
-        m.authStatusLabel.text = "Code already used. Press * for a new code."
+        m.detailAuthStatus.text = "Code already used. Press OK on Account for a new code."
+        m.authFlowActive = false
         m.pollTimer.control = "stop"
     end if
 end sub
@@ -469,18 +726,200 @@ end sub
 sub onDevicePollTaskError()
     m.devicePollInFlight = false
     if m.devicePollTask.errorMessage = invalid or m.devicePollTask.errorMessage = "" then return
-    m.authStatusLabel.text = "Polling error: " + m.devicePollTask.errorMessage
+    m.detailAuthStatus.text = "Polling error: " + m.devicePollTask.errorMessage
+end sub
+
+sub enterNavigation()
+    stopHeroPreview()
+    m.primaryFocusZone = "nav"
+    m.rowList.setFocus(false)
+    m.top.setFocus(true)
+    renderNavigation()
+    showNavigationDetail()
+end sub
+
+sub exitNavigation()
+    m.primaryFocusZone = "rows"
+    renderNavigation()
+    m.rowList.setFocus(true)
+    focused = m.rowList.rowItemFocused
+    if focused <> invalid then
+        showDetailFromIndexes(focused)
+    end if
+end sub
+
+sub renderNavigation()
+    homeFocused = false
+    myListFocused = false
+    accountFocused = false
+    if m.primaryFocusZone = "nav" then
+        homeFocused = m.navIndex = 0
+        myListFocused = m.navIndex = 1
+        accountFocused = m.navIndex = 2
+    end if
+
+    paintNavItem(m.navHomeBg, m.navHomeLabel, homeFocused)
+    paintNavItem(m.navMyListBg, m.navMyListLabel, myListFocused)
+    paintNavItem(m.navAccountBg, m.navAccountLabel, accountFocused)
+
+    if m.deviceAccessToken <> "" then
+        m.navAccountLabel.text = "Sign Out"
+    else
+        m.navAccountLabel.text = "Sign In"
+    end if
+end sub
+
+sub paintNavItem(bg as Object, label as Object, focused as Boolean)
+    if focused then
+        bg.color = "0xFFD54AFF"
+        label.color = "0x07131AFF"
+    else
+        bg.color = "0x0C1F2900"
+        label.color = "0xB8C6D1FF"
+    end if
+end sub
+
+sub showNavigationDetail()
+    navId = m.navRows[m.navIndex]
+    if navId = "home" then
+        m.detailTitle.text = "Home"
+        m.detailMeta.text = "Browse Flyhigh"
+        m.detailSynopsis.text = "Featured films and curated category rows are ready to browse. Press Right to return to the titles."
+        m.detailVideoStatus.text = "Navigation"
+        m.detailAuthStatus.text = getAuthStatusLabel()
+        m.detailAction.text = "OK or Right: browse titles"
+    else if navId = "my-list" then
+        m.detailTitle.text = "My List"
+        m.detailMeta.text = "Saved titles"
+        if m.deviceAccessToken = "" then
+            m.detailSynopsis.text = "Sign in on this Roku to save and reopen your favorite titles."
+            m.detailAction.text = "OK: sign in"
+        else if m.myListItems = invalid or m.myListItems.Count() = 0 then
+            m.detailSynopsis.text = "Your My List is empty. Press Play/Pause on a title to add it."
+            m.detailAction.text = "Right: browse titles"
+        else
+            m.detailSynopsis.text = "Your saved titles are pinned near the top of the browse rows."
+            m.detailAction.text = "Right: browse My List row"
+        end if
+        m.detailVideoStatus.text = "Navigation"
+        m.detailAuthStatus.text = getAuthStatusLabel()
+    else
+        m.detailTitle.text = "Account"
+        m.detailMeta.text = "TV account"
+        if m.deviceAccessToken <> "" then
+            m.detailSynopsis.text = "This Roku is linked to your Flyhigh account. Sign out here if you want to switch accounts on this TV."
+            m.detailAuthStatus.text = "TV signed in"
+            m.detailAction.text = "OK: sign out on this TV"
+        else
+            m.detailSynopsis.text = "Sign in with a code on your phone or computer to unlock premium playback, My List, and Continue Watching."
+            m.detailAuthStatus.text = "TV not signed in"
+            m.detailAction.text = "OK: get sign-in code"
+        end if
+        m.detailVideoStatus.text = "Navigation"
+    end if
+end sub
+
+function getAuthStatusLabel() as String
+    if m.deviceAccessToken <> "" then return "TV signed in"
+    return "TV not signed in"
+end function
+
+function handleNavigationKey(normalizedKey as String) as Boolean
+    if normalizedKey = "up" then
+        m.navIndex = m.navIndex - 1
+        if m.navIndex < 0 then m.navIndex = 2
+        renderNavigation()
+        showNavigationDetail()
+        return true
+    else if normalizedKey = "down" then
+        m.navIndex = (m.navIndex + 1) mod 3
+        renderNavigation()
+        showNavigationDetail()
+        return true
+    else if normalizedKey = "right" or normalizedKey = "back" or normalizedKey = "backspace" then
+        exitNavigation()
+        return true
+    else if normalizedKey = "ok" then
+        activateNavigationItem()
+        return true
+    end if
+
+    return true
+end function
+
+sub activateNavigationItem()
+    navId = m.navRows[m.navIndex]
+    if navId = "home" then
+        exitNavigation()
+    else if navId = "my-list" then
+        if m.deviceAccessToken = "" then
+            beginDeviceLogin()
+        else
+            m.statusLabel.text = "My List is pinned near the top when titles are saved"
+            exitNavigation()
+        end if
+    else if navId = "account" then
+        if m.deviceAccessToken <> "" then
+            signOutDevice()
+        else
+            beginDeviceLogin()
+        end if
+    end if
+end sub
+
+sub signOutDevice()
+    stopHeroPreview()
+    m.deviceAccessToken = ""
+    clearDeviceToken()
+    m.continueWatchingItems = []
+    clearMyListRow()
+    refreshAuthCopy()
+    renderNavigation()
+    m.statusLabel.text = "Signed out on this TV"
+    m.detailTitle.text = "Account"
+    m.detailMeta.text = "TV account"
+    m.detailSynopsis.text = "This Roku has been signed out. Use OK to request a new sign-in code."
+    m.detailVideoStatus.text = "Navigation"
+    m.detailAuthStatus.text = "TV not signed in"
+    m.detailAction.text = "OK: get sign-in code"
 end sub
 
 sub attemptPlayback(item as Object)
-    if item = invalid then return
+    if item = invalid then
+        if m.deviceAccessToken = "" then
+            m.statusLabel.text = "Opening TV sign-in..."
+            beginDeviceLogin()
+        else
+            m.statusLabel.text = "Choose a title first"
+        end if
+        return
+    end if
 
-    path = "/v1/content/" + safeToString(item.id) + "/playback"
-    token = m.deviceAccessToken
-    if token = invalid then token = ""
+    contentId = safeToString(item.id)
+    if safeToString(item.specialAction) = "sign-in" then
+        m.statusLabel.text = "Opening TV sign-in..."
+        beginDeviceLogin()
+        return
+    else if safeToString(item.specialAction) = "account" then
+        m.statusLabel.text = "Refreshing TV sign-in..."
+        beginDeviceLogin()
+        return
+    end if
 
-    m.statusLabel.text = "Requesting playback for " + safeToString(item.title)
-    runTask(m.playbackTask, path, "POST", {}, token, "playback")
+    if contentId = "" then
+        m.statusLabel.text = "Selected title is missing content ID"
+        return
+    end if
+
+    if m.deviceAccessToken = "" and item.isPremium = true then
+        m.statusLabel.text = "Sign in required for this title"
+        beginDeviceLogin()
+        return
+    end if
+
+    m.playbackFailed = false
+    m.statusLabel.text = "Checking playback..."
+    runTask(m.playbackTask, "/v1/content/" + contentId + "/playback", "POST", invalid, m.deviceAccessToken, "playback")
 end sub
 
 sub onPlaybackTaskResponse()
@@ -507,13 +946,22 @@ sub onPlaybackTaskResponse()
         m.playbackFailed = true
     end if
 end sub
-
 sub onPlaybackTaskError()
     if m.playbackTask.errorMessage = invalid or m.playbackTask.errorMessage = "" then return
-    if m.playbackTask.response <> invalid and m.playbackTask.response.reason <> invalid
-        if LCase(safeToString(m.playbackTask.response.reason)) = "requires_subscription" then
-            m.statusLabel.text = "Subscription required"
-            beginDeviceLogin()
+    if m.playbackTask.response <> invalid then
+        responseReason = ""
+        if m.playbackTask.response.reason <> invalid then responseReason = LCase(safeToString(m.playbackTask.response.reason))
+        responseError = ""
+        if m.playbackTask.response.error <> invalid then responseError = LCase(safeToString(m.playbackTask.response.error))
+        if responseReason = "requires_subscription" or responseError = "forbidden" then
+            if m.deviceAccessToken <> "" then
+                m.statusLabel.text = "Subscription required"
+                m.detailAuthStatus.text = "Signed in, but this account is not currently entitled for this premium title."
+                m.detailAction.text = "Use a subscribed account, an admin account, or manage subscription on the web."
+            else
+                m.statusLabel.text = "Sign in required"
+                beginDeviceLogin()
+            end if
             return
         end if
     end if
@@ -522,6 +970,7 @@ sub onPlaybackTaskError()
 end sub
 
 sub openVideoPlayer(playbackUrl as String, title as String)
+    stopHeroPreview()
     content = CreateObject("roSGNode", "ContentNode")
     content.title = title
     content.url = playbackUrl
@@ -538,6 +987,7 @@ sub closeVideoPlayer()
     m.videoPlayer.control = "stop"
     m.videoPlayer.visible = false
     m.rowList.setFocus(true)
+    renderHeroForItem(m.currentItem)
 end sub
 
 sub onVideoStateChanged()
@@ -550,33 +1000,76 @@ end sub
 function onKeyEvent(key as String, press as Boolean) as Boolean
     if press = false then return false
 
-    if key = "back" then
+    if m.authPanel.visible = true then
+        m.authCloseHint.text = "Last key: " + key + "   Back or Left: close"
+    end if
+
+    normalizedKey = LCase(key)
+
+    if m.primaryFocusZone = "nav" then
+        return handleNavigationKey(normalizedKey)
+    end if
+
+    if normalizedKey = "back" or normalizedKey = "backspace" then
         if m.videoPlayer.visible = true then
             closeVideoPlayer()
             return true
         end if
         if m.authPanel.visible = true then
-            m.authPanel.visible = false
-            m.pollTimer.control = "stop"
-            m.rowList.setFocus(true)
+            closeAuthPanel()
             return true
         end if
-        return false
+        if m.authFlowActive = true then
+            closeAuthPanel()
+            if m.rowList.rowItemFocused = invalid then
+                showDetailFromIndexes([0, 0])
+            else
+                showDetailFromIndexes(m.rowList.rowItemFocused)
+            end if
+            return true
+        end if
+        enterNavigation()
+        return true
     end if
 
-    if key = "options" then
+    if m.authPanel.visible = true then
+        if normalizedKey = "left" or normalizedKey = "back" or normalizedKey = "backspace" then
+            closeAuthPanel()
+            return true
+        end if
+
+        if normalizedKey = "down" or normalizedKey = "up" or normalizedKey = "left" or normalizedKey = "right" then
+            return true
+        end if
+
+        if normalizedKey = "ok" or normalizedKey = "options" or normalizedKey = "play" then
+            return true
+        end if
+
+        return true
+    end if
+
+    if normalizedKey = "options" then
+        m.navIndex = 2
+        enterNavigation()
         beginDeviceLogin()
         return true
     end if
 
-    if key = "play" then
+    if normalizedKey = "left" then
+        if m.videoPlayer.visible = true then return false
+        enterNavigation()
+        return true
+    end if
+
+    if normalizedKey = "play" then
         if m.videoPlayer.visible = true then return false
         if m.authPanel.visible = true then return true
         toggleMyList(m.currentItem)
         return true
     end if
 
-    if key = "replay" then
+    if normalizedKey = "replay" then
         if m.videoPlayer.visible = true then return false
         if m.playbackFailed and m.currentItem <> invalid then
             m.statusLabel.text = "Retrying playback..."
@@ -591,7 +1084,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
         end if
     end if
 
-    if key = "OK" then
+    if normalizedKey = "ok" then
         if m.videoPlayer.visible = true then return true
         if m.authPanel.visible = true then return true
         attemptPlayback(m.currentItem)
@@ -606,6 +1099,79 @@ function safeToString(value as Dynamic) as String
     return value.ToStr()
 end function
 
+sub setPrimaryFocusZone(zone as String)
+    m.primaryFocusZone = zone
+
+    m.signInButtonBg.color = "0x16313FFF"
+    m.signInButtonLabel.color = "0xF5F7FAFF"
+    m.rowList.setFocus(true)
+    renderNavigation()
+end sub
+
+sub refreshAuthCopy()
+    if m.deviceAccessToken <> "" then
+        m.authShortcutLabel.text = "Signed in"
+        m.signInButtonGroup.visible = false
+        m.hintLabel.text = "OK: Play / Details    Play/Pause: My List    Replay: Retry    *: Switch TV sign-in"
+        setPrimaryFocusZone("rows")
+    else
+        m.authShortcutLabel.text = "Signed out"
+        m.signInButtonGroup.visible = false
+        m.hintLabel.text = "OK: Play    Left: Menu    Play/Pause: My List    *: Sign in"
+        setPrimaryFocusZone("rows")
+    end if
+    renderNavigation()
+end sub
+
+function getPosterUrl(item as Object) as String
+    if safeToString(item.specialAction) = "sign-in" then
+        return "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80"
+    else if safeToString(item.specialAction) = "account" then
+        return "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=800&q=80"
+    end if
+    posterUrl = safeToString(item.posterUrl)
+    if posterUrl <> "" then return optimizePosterUrl(posterUrl)
+    return "https://images.unsplash.com/photo-1516321497487-e288fb19713f?auto=format&fit=crop&w=440&q=70&fit=crop"
+end function
+
+function optimizePosterUrl(url as String) as String
+    if url = "" then return ""
+
+    if Instr(1, url, "image.mux.com/") > 0 then
+        separator = "?"
+        if Instr(1, url, "?") > 0 then separator = "&"
+        return url + separator + "width=440&height=232&fit_mode=preserve"
+    end if
+
+    return url
+end function
+
+function getPreviewUrl(item as Object) as String
+    if item = invalid then return ""
+    previewUrl = safeToString(item.previewUrl)
+    if previewUrl <> "" then return previewUrl
+    heroPreviewUrl = safeToString(item.heroPreviewUrl)
+    if heroPreviewUrl <> "" then return heroPreviewUrl
+    return ""
+end function
+
+function getReleaseYearLabel(item as Object) as String
+    if item <> invalid and item.releaseYear <> invalid then
+        return safeToString(item.releaseYear)
+    end if
+    return "n/a"
+end function
+
+function getDurationMinutesLabel(item as Object) as String
+    if item <> invalid and item.durationSeconds <> invalid then
+        durationSeconds = val(safeToString(item.durationSeconds))
+        if durationSeconds > 0 then
+            return Int(durationSeconds / 60).ToStr()
+        end if
+    end if
+    return "0"
+end function
+
 function loadDeviceToken() as String
     sec = CreateObject("roRegistrySection", "flyhigh")
     token = sec.Read("deviceAccessToken")
@@ -616,5 +1182,11 @@ end function
 sub saveDeviceToken(token as String)
     sec = CreateObject("roRegistrySection", "flyhigh")
     sec.Write("deviceAccessToken", token)
+    sec.Flush()
+end sub
+
+sub clearDeviceToken()
+    sec = CreateObject("roRegistrySection", "flyhigh")
+    sec.Delete("deviceAccessToken")
     sec.Flush()
 end sub

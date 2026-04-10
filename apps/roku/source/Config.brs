@@ -1,7 +1,7 @@
 function Flyhigh_GetConfig() as Object
     return {
-        apiBaseUrl: "http://172.20.10.2:4000"
-        webActivateBaseUrl: "http://172.20.10.2:3004"
-        appName: "roku-dev"
+        apiBaseUrl: "https://api.flyhigh.tv"
+        webActivateBaseUrl: "https://app.flyhigh.tv"
+        appName: "roku-beta"
     }
 end function

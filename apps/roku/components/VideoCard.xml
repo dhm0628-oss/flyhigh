@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="VideoCard" extends="Group">
+  <interface>
+    <field id="itemContent" type="node" onChange="onItemContentChanged" />
+    <field id="focusPercent" type="float" onChange="onFocusChanged" />
+  </interface>
+  <children>
+    <Rectangle id="focusBorder" translation="[-4,18]" width="228" height="124" color="0xFFD54AFF" visible="false" />
+    <Rectangle id="cardBg" translation="[0,22]" width="220" height="116" color="0x0C1F29FF" />
+    <Poster id="posterFallback" translation="[0,22]" width="220" height="116" uri="pkg:/images/poster-fallback.png" loadDisplayMode="scaleToFill" />
+    <Poster id="poster" translation="[0,22]" width="220" height="116" visible="false" loadDisplayMode="scaleToFill" loadingBitmapUri="pkg:/images/poster-fallback.png" failedBitmapUri="pkg:/images/poster-fallback.png" />
+    <Rectangle translation="[0,104]" width="220" height="34" color="0x02080BD8" />
+    <Label id="titleLabel" translation="[8,106]" width="204" height="24" color="0xF5F7FAFF" numLines="2" wrap="true" text="" />
+  </children>
+  <script type="text/brightscript" uri="pkg:/components/VideoCard.brs" />
+</component>
