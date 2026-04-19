@@ -15,6 +15,8 @@ sub init()
     m.authShortcutLabel = m.top.findNode("authShortcutLabel")
     m.navHomeBg = m.top.findNode("navHomeBg")
     m.navHomeLabel = m.top.findNode("navHomeLabel")
+    m.navSearchBg = m.top.findNode("navSearchBg")
+    m.navSearchLabel = m.top.findNode("navSearchLabel")
     m.navMyListBg = m.top.findNode("navMyListBg")
     m.navMyListLabel = m.top.findNode("navMyListLabel")
     m.navAccountBg = m.top.findNode("navAccountBg")
@@ -58,8 +60,11 @@ sub init()
     m.deviceStartTask = m.top.findNode("deviceStartTask")
     m.devicePollTask = m.top.findNode("devicePollTask")
     m.playbackTask = m.top.findNode("playbackTask")
+    m.searchTask = m.top.findNode("searchTask")
 
     m.baseRows = []
+    m.homeFeedRows = []
+    m.homeHeroItems = []
     m.feedRows = []
     m.continueWatchingItems = []
     m.myListItems = []
@@ -74,9 +79,14 @@ sub init()
     m.deviceAccessToken = loadDeviceToken()
     m.heroItems = []
     m.heroIndex = 0
+    m.currentBrowseMode = "home"
+    m.searchQuery = ""
+    m.searchDialog = invalid
+    m.launchCompleteSent = false
+    m.dialogBeaconOpenCount = 0
     m.primaryFocusZone = "rows"
     m.navIndex = 0
-    m.navRows = ["home", "my-list", "account"]
+    m.navRows = ["search", "home", "my-list", "account"]
 
     setupTask(m.homeTask, "onHomeTaskResponse", "onHomeTaskError")
     setupTask(m.continueWatchingTask, "onContinueWatchingTaskResponse", "onContinueWatchingTaskError")
@@ -85,6 +95,7 @@ sub init()
     setupTask(m.deviceStartTask, "onDeviceStartTaskResponse", "onDeviceStartTaskError")
     setupTask(m.devicePollTask, "onDevicePollTaskResponse", "onDevicePollTaskError")
     setupTask(m.playbackTask, "onPlaybackTaskResponse", "onPlaybackTaskError")
+    setupTask(m.searchTask, "onSearchTaskResponse", "onSearchTaskError")
 
     m.rowList.observeField("rowItemFocused", "onRowItemFocused")
     m.rowList.observeField("rowItemSelected", "onRowItemSelected")
@@ -173,22 +184,26 @@ sub onHomeTaskResponse()
         featuredItems = [res.featured]
     end if
 
+    m.homeHeroItems = featuredItems
     setHeroItems(featuredItems)
 
     m.baseRows = rows
+    m.homeFeedRows = rows
     m.feedRows = rows
+    m.currentBrowseMode = "home"
     m.homeLoadFailed = false
 
     renderRows()
+    m.debugLabel.text = "Home rows: " + rows.Count().ToStr() + " | Feed rows: " + m.feedRows.Count().ToStr()
     if featuredItems.Count() > 0 then
-        m.debugLabel.text = "Featured: " + safeToString(featuredItems[0].title)
+        m.debugItemsLabel.text = "Featured: " + safeToString(featuredItems[0].title)
     else
-        m.debugLabel.text = "No featured item returned"
+        m.debugItemsLabel.text = "No featured item returned"
     end if
     if rows.Count() > 0 and rows[0].items <> invalid and rows[0].items.Count() > 0 then
-        m.debugItemsLabel.text = rows[0].title + ": " + safeToString(rows[0].items[0].title)
+        m.debugItemsLabel.text = m.debugItemsLabel.text + " | " + rows[0].title + ": " + safeToString(rows[0].items[0].title)
     else
-        m.debugItemsLabel.text = "No row items returned"
+        m.debugItemsLabel.text = m.debugItemsLabel.text + " | No row items returned"
     end if
 
     if m.deviceAccessToken <> "" then
@@ -205,6 +220,8 @@ sub onHomeTaskResponse()
     else
         showDetailFromIndexes(focused)
     end if
+
+    signalLaunchCompleteIfNeeded()
 end sub
 
 sub renderRows()
@@ -360,6 +377,7 @@ sub onHomeTaskError()
     m.debugLabel.text = "Home feed failed"
     m.debugItemsLabel.text = m.homeTask.errorMessage
     m.hintLabel.text = "Replay: Retry home feed    OK: Play    Play/Pause: My List    *: TV Sign-in"
+    signalLaunchCompleteIfNeeded()
 end sub
 
 sub rebuildPersonalizedRows()
@@ -385,8 +403,139 @@ sub rebuildPersonalizedRows()
         nextRows.Push(row)
     end for
 
-    m.feedRows = nextRows
+    m.homeFeedRows = nextRows
+    if m.currentBrowseMode = "home" then
+        m.feedRows = nextRows
+        renderRows()
+    end if
+end sub
+
+sub openSearchDialog()
+    stopHeroPreview()
+    if m.searchDialog <> invalid then
+        m.searchDialog.close = true
+    end if
+
+    dialog = CreateObject("roSGNode", "StandardKeyboardDialog")
+    dialog.title = "Search Flyhigh"
+    dialog.buttons = ["Search", "Cancel"]
+    dialog.text = ""
+    dialog.observeField("buttonSelected", "onSearchDialogButtonSelected")
+
+    scene = m.top.getScene()
+    signalDialogInitiate()
+    scene.dialog = dialog
+    m.searchDialog = dialog
+end sub
+
+sub onSearchDialogButtonSelected()
+    if m.searchDialog = invalid then return
+
+    selectedIndex = m.searchDialog.buttonSelected
+    query = safeToString(m.searchDialog.text).Trim()
+    m.searchDialog.close = true
+    m.searchDialog = invalid
+    signalDialogComplete()
+
+    if selectedIndex <> 0 then
+        m.searchQuery = ""
+        showNavigationDetail()
+        return
+    end if
+
+    if Len(query) < 2 then
+        m.searchQuery = ""
+        m.statusLabel.text = "Enter at least 2 characters to search"
+        m.detailTitle.text = "Search"
+        m.detailMeta.text = "Need a little more text"
+        m.detailSynopsis.text = "Use 2 or more letters so Roku can find titles, tags, authors, and descriptions."
+        m.detailVideoStatus.text = "Navigation"
+        m.detailAuthStatus.text = getAuthStatusLabel()
+        m.detailAction.text = "OK: search again"
+        return
+    end if
+
+    executeSearch(query)
+end sub
+
+sub executeSearch(query as String)
+    m.searchQuery = query
+    m.currentBrowseMode = "search"
+    m.statusLabel.text = "Searching for " + query + "..."
+    m.detailTitle.text = "Search"
+    m.detailMeta.text = "Looking for " + query
+    m.detailSynopsis.text = "Search is checking titles, synopses, tags, and authors."
+    m.detailVideoStatus.text = "Navigation"
+    m.detailAuthStatus.text = getAuthStatusLabel()
+    m.detailAction.text = "Please wait..."
+
+    encodedQuery = urlEncode(query)
+    runTask(m.searchTask, "/v1/content/catalog?q=" + encodedQuery + "&limit=48&sort=featured", "GET", invalid, "", "search")
+end sub
+
+sub onSearchTaskResponse()
+    res = m.searchTask.response
+    if res = invalid then return
+
+    items = []
+    if res.items <> invalid then items = res.items
+
+    m.currentBrowseMode = "search"
+    if items.Count() = 0 then
+        m.feedRows = []
+        setHeroItems([])
+        renderRows()
+        exitNavigation()
+        m.currentItem = invalid
+        m.statusLabel.text = "No results found"
+        m.detailTitle.text = "No results"
+        m.detailMeta.text = "Search"
+        m.detailSynopsis.text = "We could not find any titles for " + Chr(34) + m.searchQuery + Chr(34) + ". Try a shorter or broader search."
+        m.detailVideoStatus.text = "Search"
+        m.detailAuthStatus.text = getAuthStatusLabel()
+        m.detailAction.text = "OK on Search: try again"
+        return
+    end if
+
+    m.feedRows = [{
+        id: "search-results"
+        title: "Results for " + Chr(34) + m.searchQuery + Chr(34)
+        items: items
+    }]
+    setHeroItems(items)
     renderRows()
+    exitNavigation()
+    m.statusLabel.text = "Found " + items.Count().ToStr() + " results"
+    showDetailFromIndexes([0, 0])
+    renderHeroForItem(m.currentItem)
+    m.rowList.jumpToRowItem = [0, 0]
+    m.rowList.setFocus(true)
+end sub
+
+sub onSearchTaskError()
+    if m.searchTask.errorMessage = invalid or m.searchTask.errorMessage = "" then return
+    exitNavigation()
+    m.statusLabel.text = "Search error: " + m.searchTask.errorMessage
+    m.detailTitle.text = "Search error"
+    m.detailMeta.text = "Search"
+    m.detailSynopsis.text = "We could not load search results right now. Please try again."
+    m.detailVideoStatus.text = "Search"
+    m.detailAuthStatus.text = getAuthStatusLabel()
+    m.detailAction.text = "OK on Search: try again"
+end sub
+
+sub showHomeBrowse()
+    m.currentBrowseMode = "home"
+    m.searchQuery = ""
+    m.feedRows = m.homeFeedRows
+    setHeroItems(m.homeHeroItems)
+    renderRows()
+    if m.feedRows <> invalid and m.feedRows.Count() > 0 then
+        m.rowList.jumpToRowItem = [0, 0]
+        showDetailFromIndexes([0, 0])
+        renderHeroForItem(m.currentItem)
+    end if
+    m.statusLabel.text = "Browse ready"
 end sub
 
 sub onRowItemFocused()
@@ -575,7 +724,8 @@ sub beginDeviceLogin()
     stopHeroPreview()
     m.primaryFocusZone = "rows"
     m.authFlowActive = true
-    m.authPanel.visible = false
+    signalDialogInitiate()
+    m.authPanel.visible = true
     m.rowList.setFocus(true)
     m.top.setFocus(true)
     renderNavigation()
@@ -609,6 +759,7 @@ sub closeAuthPanel()
     m.authFlowActive = false
     m.pollTimer.control = "stop"
     m.deviceStartTimeoutTimer.control = "stop"
+    signalDialogComplete()
     setPrimaryFocusZone("rows")
 end sub
 
@@ -616,6 +767,7 @@ sub onDeviceStartTaskResponse()
     res = m.deviceStartTask.response
     if res = invalid then return
     m.deviceStartTimeoutTimer.control = "stop"
+    m.authPanel.visible = true
 
     m.deviceLoginId = safeToString(res.deviceLoginId)
     m.deviceCode = safeToString(res.userCode)
@@ -626,12 +778,12 @@ sub onDeviceStartTaskResponse()
     end if
 
     m.authCodeLabel.text = m.deviceCode
-    m.authUrlLabel.text = m.config.webActivateBaseUrl + "/activate?code=" + m.deviceCode
+    m.authUrlLabel.text = m.config.webActivateBaseUrl + "/activate"
     m.authStatusLabel.text = "On a phone/computer, open the URL and approve this code"
     m.statusLabel.text = "Activation code ready"
     m.detailTitle.text = "Activate this TV"
     m.detailMeta.text = "Code: " + m.deviceCode
-    m.detailSynopsis.text = "Open " + m.config.webActivateBaseUrl + "/activate?code=" + m.deviceCode + " on your phone or computer, then approve this Roku."
+    m.detailSynopsis.text = "Open " + m.config.webActivateBaseUrl + "/activate on your phone or computer, enter code " + m.deviceCode + ", then approve this Roku."
     m.detailVideoStatus.text = "Account"
     m.detailAuthStatus.text = "Waiting for approval..."
     m.detailAction.text = "Press Back to cancel sign-in"
@@ -699,6 +851,7 @@ sub onDevicePollTaskResponse()
             m.pollTimer.control = "stop"
             m.authFlowActive = false
             m.authPanel.visible = false
+            signalDialogComplete()
             m.statusLabel.text = "TV sign-in complete"
             m.detailAuthStatus.text = "TV signed in"
             setPrimaryFocusZone("rows")
@@ -749,15 +902,18 @@ sub exitNavigation()
 end sub
 
 sub renderNavigation()
+    searchFocused = false
     homeFocused = false
     myListFocused = false
     accountFocused = false
     if m.primaryFocusZone = "nav" then
-        homeFocused = m.navIndex = 0
-        myListFocused = m.navIndex = 1
-        accountFocused = m.navIndex = 2
+        searchFocused = m.navIndex = 0
+        homeFocused = m.navIndex = 1
+        myListFocused = m.navIndex = 2
+        accountFocused = m.navIndex = 3
     end if
 
+    paintNavItem(m.navSearchBg, m.navSearchLabel, searchFocused)
     paintNavItem(m.navHomeBg, m.navHomeLabel, homeFocused)
     paintNavItem(m.navMyListBg, m.navMyListLabel, myListFocused)
     paintNavItem(m.navAccountBg, m.navAccountLabel, accountFocused)
@@ -781,7 +937,19 @@ end sub
 
 sub showNavigationDetail()
     navId = m.navRows[m.navIndex]
-    if navId = "home" then
+    if navId = "search" then
+        m.detailTitle.text = "Search"
+        m.detailMeta.text = "Find a title"
+        if m.searchQuery <> "" then
+            m.detailSynopsis.text = "Search for a title, tag, author, or keyword. Current query: " + Chr(34) + m.searchQuery + Chr(34) + "."
+            m.detailAction.text = "OK: search again | Right: keep browsing"
+        else
+            m.detailSynopsis.text = "Search across Flyhigh titles, tags, authors, and descriptions."
+            m.detailAction.text = "OK: open search keyboard"
+        end if
+        m.detailVideoStatus.text = "Navigation"
+        m.detailAuthStatus.text = getAuthStatusLabel()
+    else if navId = "home" then
         m.detailTitle.text = "Home"
         m.detailMeta.text = "Browse Flyhigh"
         m.detailSynopsis.text = "Featured films and curated category rows are ready to browse. Press Right to return to the titles."
@@ -827,12 +995,12 @@ end function
 function handleNavigationKey(normalizedKey as String) as Boolean
     if normalizedKey = "up" then
         m.navIndex = m.navIndex - 1
-        if m.navIndex < 0 then m.navIndex = 2
+        if m.navIndex < 0 then m.navIndex = m.navRows.Count() - 1
         renderNavigation()
         showNavigationDetail()
         return true
     else if normalizedKey = "down" then
-        m.navIndex = (m.navIndex + 1) mod 3
+        m.navIndex = (m.navIndex + 1) mod m.navRows.Count()
         renderNavigation()
         showNavigationDetail()
         return true
@@ -849,7 +1017,10 @@ end function
 
 sub activateNavigationItem()
     navId = m.navRows[m.navIndex]
-    if navId = "home" then
+    if navId = "search" then
+        openSearchDialog()
+    else if navId = "home" then
+        showHomeBrowse()
         exitNavigation()
     else if navId = "my-list" then
         if m.deviceAccessToken = "" then
@@ -1050,7 +1221,7 @@ function onKeyEvent(key as String, press as Boolean) as Boolean
     end if
 
     if normalizedKey = "options" then
-        m.navIndex = 2
+        m.navIndex = 3
         enterNavigation()
         beginDeviceLogin()
         return true
@@ -1171,6 +1342,46 @@ function getDurationMinutesLabel(item as Object) as String
     end if
     return "0"
 end function
+
+function urlEncode(value as String) as String
+    encoded = ""
+    for i = 1 to Len(value)
+        ch = Mid(value, i, 1)
+        code = Asc(ch)
+        if (code >= 48 and code <= 57) or (code >= 65 and code <= 90) or (code >= 97 and code <= 122) then
+            encoded = encoded + ch
+        else if ch = " " then
+            encoded = encoded + "%20"
+        else if ch = "-" or ch = "_" or ch = "." or ch = "~" then
+            encoded = encoded + ch
+        else
+            hex = Right("0" + Hex(code), 2)
+            encoded = encoded + "%" + hex
+        end if
+    end for
+    return encoded
+end function
+
+sub signalLaunchCompleteIfNeeded()
+    if m.launchCompleteSent = true then return
+    m.top.signalBeacon("AppLaunchComplete")
+    m.launchCompleteSent = true
+end sub
+
+sub signalDialogInitiate()
+    if m.dialogBeaconOpenCount = 0 then
+        m.top.signalBeacon("AppDialogInitiate")
+    end if
+    m.dialogBeaconOpenCount = m.dialogBeaconOpenCount + 1
+end sub
+
+sub signalDialogComplete()
+    if m.dialogBeaconOpenCount <= 0 then return
+    m.dialogBeaconOpenCount = m.dialogBeaconOpenCount - 1
+    if m.dialogBeaconOpenCount = 0 then
+        m.top.signalBeacon("AppDialogComplete")
+    end if
+end sub
 
 function loadDeviceToken() as String
     sec = CreateObject("roRegistrySection", "flyhigh")

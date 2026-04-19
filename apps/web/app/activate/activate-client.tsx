@@ -35,6 +35,7 @@ export function ActivateClient() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [approved, setApproved] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -79,7 +80,8 @@ export function ActivateClient() {
         method: "POST",
         body: JSON.stringify({ code })
       });
-      setNotice("Device approved. Return to your TV app.");
+      setApproved(true);
+      setNotice("TV connected. Return to your Roku or Fire TV app.");
       await lookupCode();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Code activation failed");
@@ -89,7 +91,7 @@ export function ActivateClient() {
   }
 
   return (
-    <main className="page">
+    <main className="page page--activate-tv">
       <section className="watch-hero">
         <div className="watch-hero__inner">
           <Link href="/" className="watch-back">
@@ -112,9 +114,33 @@ export function ActivateClient() {
               You need to sign in before approving a TV device code.
             </p>
             <div className="hero__actions">
-              <Link className="btn btn--primary" href="/account">
+              <Link className="btn btn--primary" href={`/account?mode=login&next=${encodeURIComponent(`/activate${code ? `?code=${code}` : ""}`)}`}>
                 Sign In / Register
               </Link>
+            </div>
+          </div>
+        ) : approved ? (
+          <div className="player-panel activate-panel activate-panel--success">
+            <h2>TV connected</h2>
+            <p className="card__meta">
+              Your device code <strong>{code}</strong> has been approved. You can return to your TV app now.
+            </p>
+            <div className="hero__actions">
+              <Link className="btn btn--primary" href="/">
+                Back to Flyhigh.tv
+              </Link>
+              <button
+                className="btn btn--ghost"
+                type="button"
+                onClick={() => {
+                  setApproved(false);
+                  setNotice(null);
+                  setCode("");
+                  setCodeStatus(null);
+                }}
+              >
+                Approve Another TV
+              </button>
             </div>
           </div>
         ) : (
@@ -182,4 +208,3 @@ export function ActivateClient() {
     </main>
   );
 }
-

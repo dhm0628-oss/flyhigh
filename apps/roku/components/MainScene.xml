@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <component name="MainScene" extends="Scene">
-  <interface />
+  <interface>
+    <field id="launchContentId" type="string" />
+    <field id="launchMediaType" type="string" />
+  </interface>
   <children>
     <Rectangle id="bg" width="1280" height="720" color="0x07131AFF" />
     <Rectangle id="debugBanner" visible="false" translation="[40,20]" width="1200" height="72" color="0xFFD54AFF" />
@@ -9,15 +12,19 @@
 
     <Rectangle id="sideRailBg" translation="[0,0]" width="190" height="720" color="0x041016F2" />
     <Label id="brandLabel" translation="[30,34]" width="130" height="44" color="0xFFD54AFF" horizAlign="center" text="MENU" />
-    <Group id="navHomeGroup" translation="[18,130]">
+    <Group id="navSearchGroup" translation="[18,130]">
+      <Rectangle id="navSearchBg" width="154" height="46" color="0x0C1F2900" />
+      <Label id="navSearchLabel" translation="[18,10]" width="118" height="28" color="0xB8C6D1FF" text="Search" />
+    </Group>
+    <Group id="navHomeGroup" translation="[18,190]">
       <Rectangle id="navHomeBg" width="154" height="46" color="0x0C1F2900" />
       <Label id="navHomeLabel" translation="[18,10]" width="118" height="28" color="0xF5F7FAFF" text="Home" />
     </Group>
-    <Group id="navMyListGroup" translation="[18,190]">
+    <Group id="navMyListGroup" translation="[18,250]">
       <Rectangle id="navMyListBg" width="154" height="46" color="0x0C1F2900" />
       <Label id="navMyListLabel" translation="[18,10]" width="118" height="28" color="0xB8C6D1FF" text="My List" />
     </Group>
-    <Group id="navAccountGroup" translation="[18,250]">
+    <Group id="navAccountGroup" translation="[18,310]">
       <Rectangle id="navAccountBg" width="154" height="46" color="0x0C1F2900" />
       <Label id="navAccountLabel" translation="[18,10]" width="118" height="28" color="0xB8C6D1FF" text="Account" />
     </Group>
@@ -62,7 +69,7 @@
       <Rectangle width="760" height="380" color="0x041016F4" />
       <Label id="authTitle" translation="[30,24]" width="700" height="50" color="0xF5F7FAFF" text="Sign in on the web" />
       <Label id="authCodeLabel" translation="[30,90]" width="700" height="90" color="0xFFD54AFF" horizAlign="center" text="------" />
-      <Label id="authUrlLabel" translation="[30,190]" width="700" height="70" color="0xF5F7FAFF" horizAlign="center" numLines="2" wrap="true" text="Open Flyhigh.tv/activate" />
+      <Label id="authUrlLabel" translation="[30,190]" width="700" height="70" color="0xF5F7FAFF" horizAlign="center" numLines="2" wrap="true" text="Open app.flyhigh.tv/activate" />
       <Label id="authStatusLabel" translation="[30,272]" width="700" height="42" color="0xD7E0E8FF" horizAlign="center" text="Waiting for approval..." />
       <Label id="authCloseHint" translation="[30,318]" width="700" height="52" color="0xB8C6D1FF" horizAlign="center" numLines="2" text="Back or Left: close this panel" />
       </Group>
@@ -81,6 +88,7 @@
     <JsonRequestTask id="deviceStartTask" />
     <JsonRequestTask id="devicePollTask" />
     <JsonRequestTask id="playbackTask" />
+    <JsonRequestTask id="searchTask" />
   </children>
   <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
 </component>

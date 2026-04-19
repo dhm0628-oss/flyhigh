@@ -500,7 +500,7 @@ export async function registerContentRoutes(app: FastifyInstance) {
         });
       }
 
-      const entitled = hasActiveEntitlement(auth.latestSubscription?.status);
+      const entitled = auth.user.role === Role.ADMIN || hasActiveEntitlement(auth.latestSubscription?.status);
       if (!entitled) {
         return reply.status(403).send({
           contentId: id,
