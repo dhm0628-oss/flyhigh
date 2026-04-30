@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import type React from "react";
 import Hls from "hls.js";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { apiFetch } from "../../../lib/http";
+import { ApiError, apiFetch } from "../../../lib/http";
 import { WEB_API_URL } from "../../../lib/runtime";
 
 type SessionResponse = {
@@ -68,6 +69,7 @@ export function PlaybackPanel({
   const [busy, setBusy] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetPromptEmail, setResetPromptEmail] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const lastProgressSentAtRef = useRef<number>(0);
   const lastProgressPositionRef = useRef<number>(0);
@@ -210,6 +212,7 @@ export function PlaybackPanel({
     setBusy("login");
     setError(null);
     setNotice(null);
+    setResetPromptEmail(null);
     try {
       await apiFetch("/v1/auth/login", {
         method: "POST",
@@ -219,7 +222,12 @@ export function PlaybackPanel({
       await loadSession();
       setNotice("Signed in. Checking playback access...");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      if (err instanceof ApiError && err.code === "PASSWORD_RESET_REQUIRED") {
+        setError("We updated your Flyhigh account. Reset your password to continue.");
+        setResetPromptEmail(email.trim());
+      } else {
+        setError(err instanceof Error ? err.message : "Login failed");
+      }
     } finally {
       setBusy(null);
     }
@@ -359,6 +367,9 @@ export function PlaybackPanel({
 
   const canResume = Boolean(savedProgress?.hasProgress && !savedProgress?.completed && (savedProgress?.positionSeconds ?? 0) > 0);
   const requiresSubscription = playback?.reason === "requires_subscription" || (isPremium && !session?.authenticated);
+  const resetPasswordHref = resetPromptEmail || email.trim()
+    ? `/account/reset-password?email=${encodeURIComponent(resetPromptEmail || email.trim())}`
+    : "/account/reset-password";
 
   return (
     <div className="player-shell">
@@ -456,6 +467,15 @@ export function PlaybackPanel({
               {busy === "login" ? "Signing in..." : "Sign In"}
             </button>
           </form>
+          <div className="auth-form__helper">
+            <a href={resetPasswordHref} className="auth-inline-link">Forgot password?</a>
+          </div>
+          {resetPromptEmail ? (
+            <div className="auth-reset-callout">
+              <p className="card__meta">We found an existing subscription for this email. Reset your password once, then come right back here.</p>
+              <a className="btn btn--secondary" href={resetPasswordHref}>Reset Password</a>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

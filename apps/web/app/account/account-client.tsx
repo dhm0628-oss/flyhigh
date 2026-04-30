@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { apiFetch } from "../../lib/http";
+import { ApiError, apiFetch } from "../../lib/http";
 import { BILLING_MODE } from "../../lib/runtime";
 
 type SessionResponse = {
@@ -80,6 +80,7 @@ export function AccountClient() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [resetPromptEmail, setResetPromptEmail] = useState<string | null>(null);
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -92,6 +93,19 @@ export function AccountClient() {
       setMode(requestedMode);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get("reset") === "success") {
+      setNotice("Password updated. You're signed in.");
+    }
+  }, [searchParams]);
+
+  function getResetPasswordHref(nextEmail?: string) {
+    const targetEmail = (nextEmail ?? email).trim();
+    return targetEmail
+      ? `/account/reset-password?email=${encodeURIComponent(targetEmail)}`
+      : "/account/reset-password";
+  }
 
   async function loadSession() {
     try {
@@ -158,6 +172,7 @@ export function AccountClient() {
     setBusy(mode);
     setError(null);
     setNotice(null);
+    setResetPromptEmail(null);
     try {
       if (mode === "login") {
         await apiFetch("/v1/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
@@ -173,7 +188,12 @@ export function AccountClient() {
         return;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Auth request failed");
+      if (err instanceof ApiError && err.code === "PASSWORD_RESET_REQUIRED") {
+        setError("We updated your Flyhigh account. Reset your password to continue.");
+        setResetPromptEmail(email.trim());
+      } else {
+        setError(err instanceof Error ? err.message : "Auth request failed");
+      }
     } finally {
       setBusy(null);
     }
@@ -524,8 +544,19 @@ export function AccountClient() {
                 {mode === "register" ? <label>Full name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} required /></label> : null}
                 <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
                 {mode === "register" ? <p className="card__meta auth-password-note">Use at least 12 chars with uppercase, lowercase, number, and symbol.</p> : null}
+                {mode === "login" ? (
+                  <div className="auth-form__helper">
+                    <a href={getResetPasswordHref()} className="auth-inline-link">Forgot password?</a>
+                  </div>
+                ) : null}
                 <button className="btn btn--primary auth-submit" type="submit">{busy === mode ? (mode === "login" ? "Signing in..." : "Creating...") : (mode === "login" ? "Sign In" : "Create Account")}</button>
               </form>
+              {resetPromptEmail ? (
+                <div className="auth-reset-callout">
+                  <p className="card__meta">We found an existing subscription for this email. Reset your password once, and everything else should carry over.</p>
+                  <a className="btn btn--secondary" href={getResetPasswordHref(resetPromptEmail)}>Reset Password</a>
+                </div>
+              ) : null}
               <p className="card__meta">Premium playback requires an active subscription.</p>
             </div>
           </div>

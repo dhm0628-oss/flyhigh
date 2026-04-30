@@ -24,6 +24,7 @@ export const env = {
   STRIPE_BILLING_PORTAL_RETURN_URL: process.env.STRIPE_BILLING_PORTAL_RETURN_URL ?? "http://localhost:3004/account",
   STRIPE_GIFT_CARD_SUCCESS_URL: process.env.STRIPE_GIFT_CARD_SUCCESS_URL ?? "http://localhost:3004/gift-cards?checkout=success",
   STRIPE_GIFT_CARD_CANCEL_URL: process.env.STRIPE_GIFT_CARD_CANCEL_URL ?? "http://localhost:3004/gift-cards?checkout=cancel",
+  WEB_APP_URL: process.env.WEB_APP_URL ?? "http://localhost:3004",
   ONESIGNAL_APP_ID: process.env.ONESIGNAL_APP_ID ?? "",
   ONESIGNAL_API_KEY: process.env.ONESIGNAL_API_KEY ?? "",
   ALERT_WEBHOOK_URL: process.env.ALERT_WEBHOOK_URL ?? "",

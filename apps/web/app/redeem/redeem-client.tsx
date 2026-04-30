@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { apiFetch } from "../../lib/http";
+import { ApiError, apiFetch } from "../../lib/http";
 
 type SessionResponse = {
   authenticated: boolean;
@@ -24,6 +24,7 @@ export function RedeemClient() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [resetPromptEmail, setResetPromptEmail] = useState<string | null>(null);
 
   async function loadSession() {
     const nextSession = await apiFetch<SessionResponse>("/v1/auth/session", { method: "GET" });
@@ -63,6 +64,7 @@ export function RedeemClient() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    setResetPromptEmail(null);
     try {
       if (!session?.authenticated) {
         if (mode === "login") {
@@ -81,11 +83,20 @@ export function RedeemClient() {
 
       await redeemGiftCard();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to redeem gift card");
+      if (err instanceof ApiError && err.code === "PASSWORD_RESET_REQUIRED") {
+        setError("We updated your Flyhigh account. Reset your password to continue.");
+        setResetPromptEmail(email.trim());
+      } else {
+        setError(err instanceof Error ? err.message : "Failed to redeem gift card");
+      }
     } finally {
       setBusy(false);
     }
   }
+
+  const resetPasswordHref = resetPromptEmail || email.trim()
+    ? `/account/reset-password?email=${encodeURIComponent(resetPromptEmail || email.trim())}`
+    : "/account/reset-password";
 
   return (
     <div className="contact-form-wrap">
@@ -117,6 +128,11 @@ export function RedeemClient() {
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </label>
             {mode === "register" ? <p className="card__meta">Use at least 12 chars with uppercase, lowercase, number, and symbol.</p> : null}
+            {mode === "login" ? (
+              <div className="auth-form__helper">
+                <a href={resetPasswordHref} className="auth-inline-link">Forgot password?</a>
+              </div>
+            ) : null}
           </>
         ) : null}
 
@@ -131,6 +147,12 @@ export function RedeemClient() {
         {!session?.authenticated ? (
           <div className="hero__actions">
             <Link className="btn btn--secondary" href="/gift-cards">Buy a Gift Card</Link>
+          </div>
+        ) : null}
+        {resetPromptEmail ? (
+          <div className="auth-reset-callout">
+            <p className="card__meta">We found an existing subscription for this email. Reset your password once, then return to finish redeeming.</p>
+            <a className="btn btn--secondary" href={resetPasswordHref}>Reset Password</a>
           </div>
         ) : null}
       </form>

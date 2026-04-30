@@ -8,6 +8,8 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:seed": "tsx prisma/seed.ts",
     "import:uscreen": "tsx scripts/import-uscreen-csv.ts",
+    "import:migrated-subscribers": "tsx scripts/import-migrated-subscribers.ts",
+    "generate:migrated-subscribers-sql": "tsx scripts/generate-migrated-subscriber-sql.ts",
     "generate:uscreen-sql": "tsx scripts/generate-uscreen-sql.ts",
     "generate:uscreen-metadata-sql": "tsx scripts/generate-uscreen-metadata-update-sql.ts",
     "generate:uscreen-tag-sql": "tsx scripts/generate-uscreen-tag-normalization-sql.ts",
