@@ -36,7 +36,7 @@ async function main() {
       code: "monthly",
       name: "Monthly",
       interval: "month",
-      priceCents: 1299
+      priceCents: 700
     }
   });
 
@@ -47,7 +47,7 @@ async function main() {
       code: "yearly",
       name: "Yearly",
       interval: "year",
-      priceCents: 11999
+      priceCents: 7000
     }
   });
 

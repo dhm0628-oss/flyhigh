@@ -416,7 +416,7 @@ class MainActivity : ComponentActivity() {
                             onState(current().copy(statusMessage = "Sign in required"))
                             startDeviceAuth(onState, current)
                         } else {
-                            onState(current().copy(statusMessage = "Subscription required. Go to flyhigh.tv/subscribe"))
+                            onState(current().copy(statusMessage = "Subscription required. Go to app.flyhigh.tv/subscribe"))
                         }
                     } else {
                         onState(current().copy(statusMessage = "Playback error: ${result.message}"))
@@ -1007,7 +1007,7 @@ private fun DeviceAuthOverlay(
                     color = Color(0xFF57D7FF)
                 )
                 Text(
-                    state.verificationUrl ?: "Open /activate on Flyhigh.tv",
+                    state.verificationUrl ?: "Open app.flyhigh.tv/activate",
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Text(state.statusText, style = MaterialTheme.typography.bodyMedium, color = Color(0xFFB7C9D4))

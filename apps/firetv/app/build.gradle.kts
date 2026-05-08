@@ -4,6 +4,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.serialization")
 }
 
+import java.util.Properties
+
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) {
+        file.inputStream().use { load(it) }
+    }
+}
+
 android {
     namespace = "tv.flyhigh.app"
     compileSdk = 34
@@ -14,11 +23,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "tv.flyhigh.app"
+        applicationId = "tv.flyhigh.app.beta"
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.1.0-beta"
 
         val apiBaseUrl = project.findProperty("FLYHIGH_API_BASE_URL")?.toString()
             ?: "http://172.20.10.2:4000"
@@ -27,6 +36,35 @@ android {
 
         buildConfigField("String", "FLYHIGH_API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "FLYHIGH_WEB_ACTIVATE_URL", "\"$webActivateUrl\"")
+    }
+
+    val uploadStoreFile = localProperties.getProperty("FIRETV_UPLOAD_STORE_FILE")
+    val uploadStorePassword = localProperties.getProperty("FIRETV_UPLOAD_STORE_PASSWORD")
+    val uploadKeyAlias = localProperties.getProperty("FIRETV_UPLOAD_KEY_ALIAS")
+    val uploadKeyPassword = localProperties.getProperty("FIRETV_UPLOAD_KEY_PASSWORD")
+
+    signingConfigs {
+        if (
+            !uploadStoreFile.isNullOrBlank() &&
+            !uploadStorePassword.isNullOrBlank() &&
+            !uploadKeyAlias.isNullOrBlank() &&
+            !uploadKeyPassword.isNullOrBlank()
+        ) {
+            create("releaseUpload") {
+                storeFile = file(uploadStoreFile)
+                storePassword = uploadStorePassword
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (signingConfigs.findByName("releaseUpload") != null) {
+                signingConfig = signingConfigs.getByName("releaseUpload")
+            }
+        }
     }
 
     buildFeatures {

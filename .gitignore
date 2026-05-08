@@ -8,4 +8,19 @@ build
 !.env.example
 coverage
 *.log
+*.tsbuildinfo
 
+# IDE / local tooling
+.idea/
+**/.idea/
+.gradle/
+**/.gradle/
+**/gradle/gradle-daemon-jvm.properties
+local.properties
+**/local.properties
+
+# Local migration / debug artifacts
+apps/api/generated-*.sql
+apps/roku/*.zip
+roku-debug-capture.txt
+tmp-home.json
