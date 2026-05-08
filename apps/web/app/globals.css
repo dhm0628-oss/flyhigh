@@ -516,6 +516,18 @@ a {
   border-color: var(--base-color);
 }
 
+.btn--ghost {
+  color: var(--base-color);
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(35, 35, 35, 0.22);
+}
+
+.btn--ghost:hover,
+.btn--ghost:focus-visible {
+  background: rgba(35, 35, 35, 0.1);
+}
+
 .btn--light-outline {
   color: #ffffff;
   border-color: #ffffff;
@@ -1352,13 +1364,25 @@ a {
 }
 
 .page--account .btn--ghost {
-  border-color: #3b4149;
-  color: #e5e7eb;
+  background: #232323;
+  border-color: #5b6470;
+  color: #f8fafc;
+}
+
+.page--account .btn--ghost:hover,
+.page--account .btn--ghost:focus-visible {
+  background: #303845;
 }
 
 .page--account .btn--secondary {
-  color: #e5e7eb;
-  border-color: #8a919c;
+  background: #f8fafc;
+  color: #111827;
+  border-color: #cbd5e1;
+}
+
+.page--account .btn--secondary:hover,
+.page--account .btn--secondary:focus-visible {
+  background: #e5e7eb;
 }
 
 .page--account .table table {
