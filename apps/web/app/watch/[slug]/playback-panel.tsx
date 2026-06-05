@@ -370,6 +370,10 @@ export function PlaybackPanel({
   const resetPasswordHref = resetPromptEmail || email.trim()
     ? `/account/reset-password?email=${encodeURIComponent(resetPromptEmail || email.trim())}`
     : "/account/reset-password";
+  const authPanelCopy = session?.authenticated
+    ? "This title requires an active subscription. Use the account page to manage your subscription."
+    : "Sign in to verify your access and start watching this premium title.";
+  const authPanelError = !session?.authenticated ? error : null;
 
   return (
     <div className="player-shell">
@@ -452,8 +456,9 @@ export function PlaybackPanel({
         <div className="player-panel player-panel--auth">
           <h3>Sign In To Watch</h3>
           <p className="card__meta">
-            This title requires an active subscription. Sign in below or use the account page to manage your subscription.
+            {authPanelCopy}
           </p>
+          {authPanelError ? <p className="web-status web-status--error" role="alert" aria-live="polite">{authPanelError}</p> : null}
           <form className="watch-login" onSubmit={handleLogin}>
             <label>
               Email
