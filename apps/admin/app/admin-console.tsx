@@ -291,7 +291,7 @@ type BatchLocalUploadRow = {
   fileName: string;
   guessedSlug: string;
   contentId: string;
-  status: "matched" | "create_draft" | "unmatched" | "blocked_existing" | "uploading" | "processing" | "failed";
+  status: "matched" | "create_draft" | "unmatched" | "blocked_existing" | "queued" | "uploading" | "processing" | "failed";
   progress: number;
   uploadUrl?: string;
   error?: string;
@@ -820,6 +820,7 @@ export function AdminConsole() {
   const [singleUploadPhase, setSingleUploadPhase] = useState<"idle" | "uploading" | "processing">("idle");
   const [importSourceUrl, setImportSourceUrl] = useState("");
   const [batchUploadRows, setBatchUploadRows] = useState<BatchLocalUploadRow[]>([]);
+  const [batchUploading, setBatchUploading] = useState(false);
   const [batchUploadConcurrency, setBatchUploadConcurrency] = useState(2);
   const [bulkCsvText, setBulkCsvText] = useState("");
   const [bulkCsvFileName, setBulkCsvFileName] = useState("");
@@ -895,6 +896,7 @@ export function AdminConsole() {
       if (batchUploadFilter === "create_draft") return row.status === "create_draft";
       if (batchUploadFilter === "unmatched") return row.status === "unmatched";
       if (batchUploadFilter === "blocked") return row.status === "blocked_existing";
+      if (batchUploadFilter === "queued") return row.status === "queued";
       if (batchUploadFilter === "uploading") return row.status === "uploading";
       if (batchUploadFilter === "processing") return row.status === "processing";
       if (batchUploadFilter === "failed") return row.status === "failed";
@@ -2145,6 +2147,8 @@ export function AdminConsole() {
   }
 
   async function onStartBatchLocalUpload() {
+    if (batchUploading) return;
+
     const eligibleRows = batchUploadRows.filter(canQueueBatchFile);
     const queuedRows = [
       ...eligibleRows.filter((row) => row.contentId),
@@ -2155,9 +2159,14 @@ export function AdminConsole() {
       return;
     }
 
-    setBusy("mux-batch-upload");
+    setBatchUploading(true);
     setError(null);
     setNotice(null);
+
+    const queuedKeys = new Set(queuedRows.map((row) => row.key));
+    setBatchUploadRows((current) => current.map((row) =>
+      queuedKeys.has(row.key) ? { ...row, status: "queued", progress: 0, error: undefined } : row
+    ));
 
     let completed = 0;
     let failed = 0;
@@ -2189,11 +2198,7 @@ export function AdminConsole() {
             continue;
           }
 
-          updateBatchUploadRow(row.key, {
-            status: "uploading",
-            progress: 0,
-            error: undefined
-          });
+          updateBatchUploadRow(row.key, { status: "uploading" });
 
           let contentId = row.contentId || item?.id;
           if (!contentId) {
@@ -2249,7 +2254,7 @@ export function AdminConsole() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Batch upload failed");
     } finally {
-      setBusy(null);
+      setBatchUploading(false);
     }
   }
 
@@ -3230,6 +3235,7 @@ export function AdminConsole() {
                       <option value="matched">Matched</option>
                       <option value="create_draft">Will create draft</option>
                       <option value="blocked">Already has video</option>
+                      <option value="queued">Queued</option>
                       <option value="uploading">Uploading</option>
                       <option value="processing">Processing</option>
                       <option value="failed">Failed</option>
@@ -3239,6 +3245,7 @@ export function AdminConsole() {
                     Concurrency
                     <select
                       value={batchUploadConcurrency}
+                      disabled={batchUploading}
                       onChange={(e) => setBatchUploadConcurrency(Number(e.target.value))}
                       style={{ marginLeft: "0.5rem" }}
                     >
@@ -3261,7 +3268,7 @@ export function AdminConsole() {
                     type="file"
                     accept="video/*"
                     multiple
-                    disabled={busy === "mux-batch-upload"}
+                    disabled={batchUploading}
                     onChange={(e) => void onBatchFilesSelected(e.target.files)}
                   />
                 </label>
@@ -3269,10 +3276,10 @@ export function AdminConsole() {
                   <button
                     type="button"
                     className="btn btn-primary"
-                    disabled={busy === "mux-batch-upload" || !batchUploadRows.some(canQueueBatchFile)}
+                    disabled={batchUploading || !batchUploadRows.some(canQueueBatchFile)}
                     onClick={() => void onStartBatchLocalUpload()}
                   >
-                    {busy === "mux-batch-upload" ? "Uploading..." : "Start Batch Upload"}
+                    {batchUploading ? "Uploading..." : "Start Batch Upload"}
                   </button>
                 </div>
               </div>
@@ -3300,10 +3307,13 @@ export function AdminConsole() {
                               <select
                                 value={row.contentId || (row.guessedSlug && row.status !== "unmatched" ? "create-draft" : "")}
                                 onChange={(e) => setBatchUploadContent(row, e.target.value)}
-                                disabled={busy === "mux-batch-upload"}
+                                disabled={batchUploading}
                               >
                                 <option value="">Skip this file</option>
                                 {row.guessedSlug ? <option value="create-draft">Use filename slug</option> : null}
+                                {row.contentId && !matchedItem ? (
+                                  <option value={row.contentId}>{titleFromFileName(row.fileName)} ({row.guessedSlug})</option>
+                                ) : null}
                                 {content.map((item) => (
                                   <option key={item.id} value={item.id}>
                                     {item.title} ({item.slug})
