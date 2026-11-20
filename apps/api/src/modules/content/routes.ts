@@ -886,6 +886,7 @@ export async function registerContentRoutes(app: FastifyInstance) {
       tags?: string[];
       isPremium?: boolean;
       publishStatus?: string;
+      reuseExistingSlug?: boolean;
     };
 
     const slug = body.slug?.trim();
@@ -898,31 +899,36 @@ export async function registerContentRoutes(app: FastifyInstance) {
       return badRequest(reply, "slug and title are required");
     }
 
-    const created = await prisma.contentItem.create({
-      data: {
-        slug,
-        title,
-        author: body.author?.trim() || null,
-        synopsis,
-        type,
-        posterUrl: body.posterUrl?.trim() ?? "",
-        heroPreviewUrl: body.heroPreviewUrl?.trim() || null,
-        playbackUrl: body.playbackUrl?.trim() || null,
-        videoProvider: body.playbackUrl ? "manual" : null,
-        videoStatus: body.playbackUrl ? "ready" : "none",
-        durationSeconds: Math.max(0, Number(body.durationSeconds ?? 0)),
-        releaseYear: body.releaseYear ?? null,
-        tags: Array.isArray(body.tags) ? body.tags.map((tag) => tag.trim()).filter(Boolean) : [],
-        isPremium: body.isPremium ?? true,
-        publishStatus,
-        publishedAt: publishStatus === PublishStatus.PUBLISHED ? new Date() : null
-      }
-    });
+    try {
+      const created = await prisma.contentItem.create({
+        data: {
+          slug,
+          title,
+          author: body.author?.trim() || null,
+          synopsis,
+          type,
+          posterUrl: body.posterUrl?.trim() ?? "",
+          heroPreviewUrl: body.heroPreviewUrl?.trim() || null,
+          playbackUrl: body.playbackUrl?.trim() || null,
+          videoProvider: body.playbackUrl ? "manual" : null,
+          videoStatus: body.playbackUrl ? "ready" : "none",
+          durationSeconds: Math.max(0, Number(body.durationSeconds ?? 0)),
+          releaseYear: body.releaseYear ?? null,
+          tags: Array.isArray(body.tags) ? body.tags.map((tag) => tag.trim()).filter(Boolean) : [],
+          isPremium: body.isPremium ?? true,
+          publishStatus,
+          publishedAt: publishStatus === PublishStatus.PUBLISHED ? new Date() : null
+        }
+      });
 
-    return reply.status(201).send({
-      id: created.id,
-      slug: created.slug
-    });
+      return reply.status(201).send({ id: created.id, slug: created.slug });
+    } catch (error) {
+      if (body.reuseExistingSlug === true && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        const existing = await prisma.contentItem.findUnique({ where: { slug } });
+        if (existing) return { id: existing.id, slug: existing.slug };
+      }
+      throw error;
+    }
   });
 
   app.patch("/v1/admin/content/:id", async (request, reply) => {
@@ -1034,6 +1040,14 @@ export async function registerContentRoutes(app: FastifyInstance) {
       return notFound(reply, "Content not found");
     }
 
+    const { preventReplacement } = (request.body ?? {}) as { preventReplacement?: boolean };
+    if (preventReplacement === true && (
+      item.playbackUrl || item.muxPlaybackId || item.muxAssetId ||
+      ["upload_created", "processing", "ready"].includes(item.videoStatus ?? "")
+    )) {
+      return reply.status(409).send({ error: "This content already has a video or an upload in progress" });
+    }
+
     const requestOrigin = typeof request.headers.origin === "string" ? request.headers.origin : undefined;
     let upload;
     try {
@@ -1047,17 +1061,32 @@ export async function registerContentRoutes(app: FastifyInstance) {
       return reply.status(502).send({ error: message });
     }
 
-    await prisma.contentItem.update({
-      where: { id: item.id },
-      data: {
-        videoProvider: "mux",
-        videoStatus: "upload_created",
-        muxUploadId: upload.id,
-        muxAssetId: null,
-        muxPlaybackId: null,
-        videoError: null
+    const data = {
+      videoProvider: "mux",
+      videoStatus: "upload_created",
+      muxUploadId: upload.id,
+      muxAssetId: null,
+      muxPlaybackId: null,
+      videoError: null
+    };
+    if (preventReplacement === true) {
+      const updated = await prisma.contentItem.updateMany({
+        where: {
+          id: item.id,
+          videoStatus: item.videoStatus,
+          playbackUrl: item.playbackUrl,
+          muxPlaybackId: item.muxPlaybackId,
+          muxAssetId: item.muxAssetId,
+          muxUploadId: item.muxUploadId
+        },
+        data
+      });
+      if (!updated.count) {
+        return reply.status(409).send({ error: "The content's video changed before the upload could start" });
       }
-    });
+    } else {
+      await prisma.contentItem.update({ where: { id: item.id }, data });
+    }
 
     return {
       provider: "mux",

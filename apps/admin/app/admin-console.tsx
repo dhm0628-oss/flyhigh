@@ -291,8 +291,9 @@ type BatchLocalUploadRow = {
   fileName: string;
   guessedSlug: string;
   contentId: string;
-  status: "matched" | "unmatched" | "blocked_existing" | "uploading" | "processing" | "failed";
+  status: "matched" | "create_draft" | "unmatched" | "blocked_existing" | "uploading" | "processing" | "failed";
   progress: number;
+  uploadUrl?: string;
   error?: string;
 };
 
@@ -319,8 +320,13 @@ function slugify(value: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function fileNameToSlug(fileName: string): string {
-  return slugify(fileName.replace(/\.[^.]+$/, ""));
+function titleFromFileName(fileName: string): string {
+  return fileName.replace(/\.[^.]+$/, "").trim();
+}
+
+function canQueueBatchFile(row: BatchLocalUploadRow): boolean {
+  return row.status === "matched" || row.status === "create_draft" ||
+    (row.status === "failed" && Boolean(row.contentId || row.guessedSlug));
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -886,7 +892,8 @@ export function AdminConsole() {
     return batchUploadRows.filter((row) => {
       if (batchUploadFilter === "all") return true;
       if (batchUploadFilter === "matched") return row.status === "matched";
-      if (batchUploadFilter === "unmatched") return !row.contentId || row.status === "unmatched";
+      if (batchUploadFilter === "create_draft") return row.status === "create_draft";
+      if (batchUploadFilter === "unmatched") return row.status === "unmatched";
       if (batchUploadFilter === "blocked") return row.status === "blocked_existing";
       if (batchUploadFilter === "uploading") return row.status === "uploading";
       if (batchUploadFilter === "processing") return row.status === "processing";
@@ -2098,7 +2105,7 @@ export function AdminConsole() {
     if (!fileList?.length) return;
 
     const nextRows = Array.from(fileList).map((file, index) => {
-      const guessedSlug = fileNameToSlug(file.name);
+      const guessedSlug = slugify(titleFromFileName(file.name));
       const match = contentBySlug.get(guessedSlug);
       const existingVideoGuard = getExistingVideoGuard(match);
       return {
@@ -2107,9 +2114,9 @@ export function AdminConsole() {
         fileName: file.name,
         guessedSlug,
         contentId: match?.id ?? "",
-        status: match ? (existingVideoGuard ? "blocked_existing" : "matched") : "unmatched",
+        status: match ? (existingVideoGuard ? "blocked_existing" : "matched") : (guessedSlug ? "create_draft" : "unmatched"),
         progress: 0,
-        error: existingVideoGuard ?? undefined
+        error: existingVideoGuard ?? (guessedSlug ? undefined : "Choose a content entry for this filename")
       } satisfies BatchLocalUploadRow;
     });
 
@@ -2124,29 +2131,27 @@ export function AdminConsole() {
     );
   }
 
-  function setBatchUploadContent(key: string, contentId: string) {
-    setBatchUploadRows((current) =>
-      current.map((row) =>
-        row.key === key
-          ? (() => {
-              const item = content.find((entry) => entry.id === contentId);
-              const existingVideoGuard = getExistingVideoGuard(item);
-              return {
-                ...row,
-                contentId,
-                status: contentId ? (existingVideoGuard ? "blocked_existing" : "matched") : "unmatched",
-                error: existingVideoGuard ?? undefined
-              };
-            })()
-          : row
-      )
-    );
+  function setBatchUploadContent(row: BatchLocalUploadRow, selection: string) {
+    const useFilename = selection === "create-draft";
+    const item = useFilename ? contentBySlug.get(row.guessedSlug) : content.find((entry) => entry.id === selection);
+    const existingVideoGuard = getExistingVideoGuard(item);
+    updateBatchUploadRow(row.key, {
+      contentId: item?.id ?? "",
+      status: item ? (existingVideoGuard ? "blocked_existing" : "matched") : (useFilename ? "create_draft" : "unmatched"),
+      progress: 0,
+      uploadUrl: undefined,
+      error: existingVideoGuard ?? undefined
+    });
   }
 
   async function onStartBatchLocalUpload() {
-    const queuedRows = batchUploadRows.filter((row) => row.contentId && row.status === "matched");
+    const eligibleRows = batchUploadRows.filter(canQueueBatchFile);
+    const queuedRows = [
+      ...eligibleRows.filter((row) => row.contentId),
+      ...eligibleRows.filter((row) => !row.contentId)
+    ];
     if (!queuedRows.length) {
-      setError("Load local files and match them to content items that do not already have video");
+      setError("Select files with a filename slug or match them to content entries that need a video");
       return;
     }
 
@@ -2157,6 +2162,8 @@ export function AdminConsole() {
     let completed = 0;
     let failed = 0;
     let cursor = 0;
+    const contentById = new Map(content.map((item) => [item.id, item]));
+    const queuedTargets = new Set<string>();
     const workerCount = Math.max(1, Math.min(4, Number(batchUploadConcurrency) || 1));
 
     const runNext = async () => {
@@ -2165,24 +2172,62 @@ export function AdminConsole() {
         cursor += 1;
 
         try {
+          const item = row.contentId ? contentById.get(row.contentId) : contentBySlug.get(row.guessedSlug);
+          const target = item ? `slug:${item.slug}` : row.contentId ? `id:${row.contentId}` : `slug:${row.guessedSlug}`;
+          if (queuedTargets.has(target)) {
+            throw new Error("Another file in this batch uses the same content entry or slug. Choose a different entry.");
+          }
+          queuedTargets.add(target);
+
+          const existingVideoGuard = getExistingVideoGuard(item);
+          if (existingVideoGuard && !row.uploadUrl) {
+            updateBatchUploadRow(row.key, {
+              contentId: item?.id ?? row.contentId,
+              status: "blocked_existing",
+              error: existingVideoGuard
+            });
+            continue;
+          }
+
           updateBatchUploadRow(row.key, {
             status: "uploading",
             progress: 0,
             error: undefined
           });
 
-          const upload = await api<{ uploadUrl: string; uploadId: string; provider: string }>(
-            `/v1/admin/content/${row.contentId}/video-upload`,
-            { method: "POST", body: JSON.stringify({}) }
-          );
+          let contentId = row.contentId || item?.id;
+          if (!contentId) {
+            const draft = await api<{ id: string }>("/v1/admin/content", {
+              method: "POST",
+              body: JSON.stringify({
+                slug: row.guessedSlug,
+                title: titleFromFileName(row.fileName),
+                publishStatus: "draft",
+                reuseExistingSlug: true
+              })
+            });
+            contentId = draft.id;
+          }
+          updateBatchUploadRow(row.key, { contentId });
 
-          await uploadFileToMux(upload.uploadUrl, row.file, (progress) => {
+          let uploadUrl = row.uploadUrl;
+          if (!uploadUrl) {
+            const upload = await api<{ uploadUrl: string }>(
+              `/v1/admin/content/${contentId}/video-upload`,
+              { method: "POST", body: JSON.stringify({ preventReplacement: true }) }
+            );
+            uploadUrl = upload.uploadUrl;
+            updateBatchUploadRow(row.key, { uploadUrl });
+          }
+
+          await uploadFileToMux(uploadUrl, row.file, (progress) => {
             updateBatchUploadRow(row.key, { progress });
           });
 
           updateBatchUploadRow(row.key, {
             status: "processing",
-            progress: 100
+            progress: 100,
+            uploadUrl: undefined
           });
           completed += 1;
         } catch (err) {
@@ -3183,6 +3228,7 @@ export function AdminConsole() {
                       <option value="all">All</option>
                       <option value="unmatched">Unmatched</option>
                       <option value="matched">Matched</option>
+                      <option value="create_draft">Will create draft</option>
                       <option value="blocked">Already has video</option>
                       <option value="uploading">Uploading</option>
                       <option value="processing">Processing</option>
@@ -3205,7 +3251,8 @@ export function AdminConsole() {
                 </div>
               </div>
               <div className="label" style={{ marginTop: "0.5rem" }}>
-                Files are matched by slugified filename first. You can override the match before starting the queue.
+                Files are matched by filename slug. Starting the batch creates drafts for missing slugs.
+                Use Content Match to choose a different entry or skip a file.
               </div>
               <div className="form-grid two-col" style={{ marginTop: "0.75rem" }}>
                 <label className="span-2">
@@ -3214,6 +3261,7 @@ export function AdminConsole() {
                     type="file"
                     accept="video/*"
                     multiple
+                    disabled={busy === "mux-batch-upload"}
                     onChange={(e) => void onBatchFilesSelected(e.target.files)}
                   />
                 </label>
@@ -3221,7 +3269,7 @@ export function AdminConsole() {
                   <button
                     type="button"
                     className="btn btn-primary"
-                    disabled={busy === "mux-batch-upload" || !batchUploadRows.some((row) => row.status === "matched")}
+                    disabled={busy === "mux-batch-upload" || !batchUploadRows.some(canQueueBatchFile)}
                     onClick={() => void onStartBatchLocalUpload()}
                   >
                     {busy === "mux-batch-upload" ? "Uploading..." : "Start Batch Upload"}
@@ -3250,11 +3298,12 @@ export function AdminConsole() {
                             <td>{row.guessedSlug || "-"}</td>
                             <td>
                               <select
-                                value={row.contentId}
-                                onChange={(e) => setBatchUploadContent(row.key, e.target.value)}
+                                value={row.contentId || (row.guessedSlug && row.status !== "unmatched" ? "create-draft" : "")}
+                                onChange={(e) => setBatchUploadContent(row, e.target.value)}
                                 disabled={busy === "mux-batch-upload"}
                               >
-                                <option value="">No match</option>
+                                <option value="">Skip this file</option>
+                                {row.guessedSlug ? <option value="create-draft">Use filename slug</option> : null}
                                 {content.map((item) => (
                                   <option key={item.id} value={item.id}>
                                     {item.title} ({item.slug})
@@ -3267,7 +3316,7 @@ export function AdminConsole() {
                                 </div>
                               ) : null}
                             </td>
-                            <td><span className="badge">{row.status}</span></td>
+                            <td><span className="badge">{row.status === "create_draft" ? "Will create draft" : row.status}</span></td>
                             <td>{row.progress}%</td>
                             <td>{row.error ?? "-"}</td>
                           </tr>
